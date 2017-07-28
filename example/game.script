@@ -1,0 +1,28 @@
+local WIDTH = tonumber(sys.get_config("display.width"))
+local HEIGHT = tonumber(sys.get_config("display.height"))
+
+local BROADSOCK = msg.url("example:/broadsock#script")
+
+local function random_position()
+	return vmath.vector3(math.random(WIDTH), math.random(HEIGHT), 0)
+end
+
+function init(self)
+	math.randomseed(os.time())
+	msg.post("@render:", "clear_color", { color = vmath.vector4(0.4, 0.5, 0.8, 1.0) })
+	msg.post(BROADSOCK, "connect", { ip = "127.0.0.1", port = 5000 })
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("connected") then
+		if sender == BROADSOCK then
+			msg.post(BROADSOCK, "register_factory", { url = "/factories#player", type = "player" })
+			msg.post(BROADSOCK, "register_factory", { url = "/factories#star", type = "star" })
+			factory.create("/factories#player", random_position(), nil, { remote = false })	
+		end
+	elseif message_id == hash("disconnected") then
+		if sender == BROADSOCK then
+			print("disconnected")
+		end
+	end
+end

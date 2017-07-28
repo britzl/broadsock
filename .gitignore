@@ -1,1 +1,10 @@
 server/broadsock
+.externalToolBuilders
+.DS_Store
+.lock-wscript
+build
+*.pyc
+.project
+.cproject
+builtins
+.internal

@@ -1,0 +1,27 @@
+go.property("remote", true)
+go.property("velocity", vmath.vector3(0, -300, 0))
+
+
+function init(self)
+	if not self.remote then
+		msg.post("/broadsock", "register_gameobject", { id = go.get_id(), type = "star" })
+		go.animate(".", "euler.z", go.PLAYBACK_LOOP_FORWARD, 360, go.EASING_LINEAR, 0.5)
+		self.ttl = 2
+	end
+end
+
+function final(self)
+	if not self.remote then
+		msg.post("/broadsock", "unregister_gameobject", { id = go.get_id() })
+	end
+end
+
+function update(self, dt)
+	if not self.remote then
+		go.set_position(go.get_position() + self.velocity * dt)
+		self.ttl = self.ttl - dt
+		if self.ttl <= 0 then
+			go.delete()
+		end
+	end
+end

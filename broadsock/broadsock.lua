@@ -1,6 +1,6 @@
 local tcp_client = require "defnet.tcp_client"
-local b64 = require "broadsock.b64"
-local rxijson = require "broadsock.rxijson"
+local b64 = require "broadsock.util.b64"
+local rxijson = require "broadsock.util.rxijson"
 json.encode = rxijson.encode
 
 
