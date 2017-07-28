@@ -1,5 +1,6 @@
 /*
  * Based on https://github.com/yorickdewid/Chat-Server
+ * And http://www.geeksforgeeks.org/socket-programming-in-cc-handling-multiple-clients-on-server-without-multi-threading/
  */
 
 #include <sys/socket.h>
@@ -10,32 +11,34 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <pthread.h>
 #include <sys/types.h>
 
-#define MAX_CLIENTS	100
+#define TRUE	1
+#define FALSE	0
 
-#define BUFFER_SIZE 8192
+#define PORT 5000
+#define MAX_CLIENTS	5
+
+#define MESSAGE_SIZE 8192
 
 static unsigned int client_count = 0;
 static int uid = 10;
 
-/* Client structure */
-typedef struct {
-	struct sockaddr_in addr;	/* Client remote address */
-	int connfd;					/* Connection file descriptor */
-	int uid;					/* Client unique identifier */
-	char name[32];				/* Client name */
-} client_t;
+typedef char Message[MESSAGE_SIZE];
 
-client_t *clients[MAX_CLIENTS];
+typedef struct {
+	struct sockaddr_in addr;
+	int connfd;
+	int uid;
+} Client;
+
+Client *clients[MAX_CLIENTS];
 
 /* Add client to queue */
-void queue_add(client_t *cl) {
-	int i;
-	for(i=0;i<MAX_CLIENTS;i++) {
+void queue_add(Client *client) {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(!clients[i]) {
-			clients[i] = cl;
+			clients[i] = client;
 			client_count++;
 			return;
 		}
@@ -44,8 +47,7 @@ void queue_add(client_t *cl) {
 
 /* Delete client from queue */
 void queue_delete(int uid) {
-	int i;
-	for(i=0;i<MAX_CLIENTS;i++) {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(clients[i]) {
 			if(clients[i]->uid == uid) {
 				clients[i] = NULL;
@@ -57,52 +59,49 @@ void queue_delete(int uid) {
 }
 
 /* Send message to all clients but the sender */
-void send_message(char *s, int uid) {
-	int i;
-	for(i=0;i<MAX_CLIENTS;i++) {
-		if(clients[i]) {
-			if(clients[i]->uid != uid) {
-				write(clients[i]->connfd, s, strlen(s));
+void send_message(Message message, int uid) {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		Client* client = clients[i];
+		if(client) {
+			if(client->uid != uid) {
+				send(client->connfd, message, strlen(message), 0);
 			}
 		}
 	}
 }
 
 /* Send message to all clients */
-void send_message_all(char *s) {
-	int i;
-	for(i=0;i<MAX_CLIENTS;i++) {
-		if(clients[i]) {
-			write(clients[i]->connfd, s, strlen(s));
+void send_message_all(Message message) {
+	for(int i=0;i<MAX_CLIENTS;i++) {
+		Client* client = clients[i];
+		if(client) {
+			send(client->connfd, message, strlen(message), 0);
 		}
 	}
 }
 
 /* Send message to sender */
-void send_message_self(const char *s, int connfd) {
-	write(connfd, s, strlen(s));
-}
-
-/* Send message to client */
-void send_message_client(char *s, int uid) {
-	int i;
-	for(i=0;i<MAX_CLIENTS;i++) {
-		if(clients[i]) {
-			if(clients[i]->uid == uid) {
-				write(clients[i]->connfd, s, strlen(s));
+void send_message_self(Message message, int connfd) {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		Client* client = clients[i];
+		if(client) {
+			if(client->connfd == connfd) {
+				send(client->connfd, message, strlen(message), 0);
+				return;
 			}
 		}
 	}
 }
 
-/* Send list of active clients */
-void send_active_clients(int connfd) {
-	int i;
-	char s[64];
-	for(i=0;i<MAX_CLIENTS;i++) {
-		if(clients[i]) {
-			sprintf(s, "<<CLIENT %d | %s\r\n", clients[i]->uid, clients[i]->name);
-			send_message_self(s, connfd);
+/* Send message to client */
+void send_message_client(Message message, int uid) {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		Client* client = clients[i];
+		if(client) {
+			if(client->uid == uid) {
+				send(client->connfd, message, strlen(message), 0);
+				return;
+			}
 		}
 	}
 }
@@ -130,132 +129,54 @@ void print_client_addr(struct sockaddr_in addr) {
  * Handle a disconnected client
  * This will remove the client from the queue and yield thread
  */
-void handle_client_disconnected(client_t* client) {
-	char buff_out[1024];
+void handle_client_disconnected(Client* client) {
+	// Notify connected clients of the disconnect
+	Message message;
+	sprintf(message, "{ \"event\": \"DISCONNECT\", \"uid\": %d }\r\n", client->uid);
+	send_message(message, client->uid);
+
+	printf("<<DISCONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
 
 	// Close connection
 	close(client->connfd);
 
-	// Notify connected clients of the disconnect
-	sprintf(buff_out, "{ \"event\": \"DISCONNECT\", \"uid\": %d }\r\n", client->uid);
-	send_message_all(buff_out);
-
-	// Log disconnect
-	printf("<<DISCONNECT ");
-	print_client_addr(client->addr);
-	printf(" REFERENCED BY %d\n", client->uid);
-
-	// Delete client from queue and yeild thread
+	// Delete client from queue
 	queue_delete(client->uid);
 	free(client);
-	pthread_detach(pthread_self());
 
 	//RemovePlayerSession()
 
 	if (client_count == 0) {
 		//TerminateGameSession() ?
+		printf("All clients have disconnected\n");
 	}
 }
-
-/* Handle all communication with the client */
-void *handle_client(void *arg) {
-	char buff_out[BUFFER_SIZE];
-	char buff_in[BUFFER_SIZE];
-	//int rlen;
-
-	client_t *client = (client_t *)arg;
-
-	while(1) {
-		int length = 0;
-		char ch;
-		do {
-			int ret = read(client->connfd, &ch, 1);
-			if (ret < 1) {
-				handle_client_disconnected(client);
-				return NULL;
-			}
-			if (ch == '\n') {
-				break;
-			}
-			buff_in[length] = ch;
-			length++;
-			if (length == BUFFER_SIZE) {
-				length = 0;
-				break;
-			}
-		} while(1);
-
-		buff_in[length] = '\0';
-		buff_out[0] = '\0';
-		strip_newline(buff_in);
-
-		// Ignore empty buffer
-		if(!strlen(buff_in)) {
-			continue;
-		}
-
-		// Send message to the other clients
-		//printf("<<DATA %s\n", buff_in);
-		sprintf(buff_out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, buff_in);
-		send_message(buff_out, client->uid);
-	}
-
-
-	// Receive input from client
-	// while((rlen = read(client->connfd, buff_in, sizeof(buff_in) - 1)) > 0) {
-	// 	buff_in[rlen] = '\0';
-	// 	buff_out[0] = '\0';
-	// 	strip_newline(buff_in);
-	//
-	// 	printf("client thread\r\n ");
-	// 	// Ignore empty buffer
-	// 	if(!strlen(buff_in)) {
-	// 		continue;
-	// 	}
-	//
-	// 	// Send message to the other clients
-	// 	//printf("<<DATA %s\n", buff_in);
-	// 	sprintf(buff_out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, buff_in);
-	// 	send_message(buff_out, client->uid);
-	// }
-
-	handle_client_disconnected(client);
-
-	return NULL;
-}
-
 
 /**
  * Handle a connected client
- * This will create a client_t struct and fork the thread
+ * This will create a Client struct and fork the thread
  */
 void handle_client_connected(struct sockaddr_in client_addr, int connfd) {
-	char buff_out[1024];
+	Message message;
 
 	// Client settings
-	client_t *client = (client_t *)malloc(sizeof(client_t));
+	Client *client = (Client *)malloc(sizeof(Client));
 	client->addr = client_addr;
 	client->connfd = connfd;
 	client->uid = uid++;
-	sprintf(client->name, "%d", client->uid);
 
-	printf("<<CONNECT ");
-	print_client_addr(client->addr);
-	printf(" REFERENCED BY %d\n", client->uid);
+	printf("<<CONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
 
-	// Add client to the queue and fork thread
+	// Add client to the queue
 	queue_add(client);
-	pthread_t tid;
-	pthread_create(&tid, NULL, &handle_client, (void*)client);
 
 	// Notify other clients of the new client
-	sprintf(buff_out, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": %d, \"port\": %d }\r\n", client->uid, client->addr.sin_addr.s_addr, client->addr.sin_port);
-	send_message(buff_out, client->uid);
+	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": \"%s\", \"port\": %d }\r\n", client->uid, inet_ntoa(client_addr.sin_addr), client->addr.sin_port);
+	send_message(message, client->uid);
 
 	// Notify self of uid
-	sprintf(buff_out, "{ \"event\": \"CONNECT\", \"uid\": %d }\r\n", client->uid);
-	send_message_self(buff_out, client->connfd);
-
+	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }\r\n", client->uid);
+	send_message_self(message, client->connfd);
 
 	// AcceptPlayerSession() ?
 }
@@ -265,24 +186,37 @@ int main(int argc, char *argv[]) {
 
 	//InitSDK()
 
-	// Socket settings
-	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	// Create master socket
+	int masterfd;
+	if((masterfd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+		perror("Socket creation failed");
+		exit(EXIT_FAILURE);
+	}
 
+	// Set master socket to allow multiple connections
+	int opt = TRUE;
+	if(setsockopt(masterfd, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
+	{
+		perror("Socket setsockopt failed");
+		exit(EXIT_FAILURE);
+	}
+
+	// Socket settings
 	struct sockaddr_in server_addr;
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	server_addr.sin_port = htons(5000);
+	server_addr.sin_port = htons(PORT);
 
-	// Bind
-	if (bind(listenfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+	// Bind master socket
+	if(bind(masterfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
 		perror("Socket binding failed");
-		return 1;
+		exit(EXIT_FAILURE);
 	}
 
-	// Listen
-	if (listen(listenfd, 10) < 0) {
+	// Listen on master socket
+	if(listen(masterfd, 10) < 0) {
 		perror("Socket listening failed");
-		return 1;
+		exit(EXIT_FAILURE);
 	}
 
 	printf("<[SERVER STARTED]>\n");
@@ -290,22 +224,97 @@ int main(int argc, char *argv[]) {
 	//ProcessReady()
 
 	// Accept clients
-	while (1) {
-		struct sockaddr_in client_addr;
-		socklen_t clilen = sizeof(client_addr);
-		int connfd = accept(listenfd, (struct sockaddr*)&client_addr, &clilen);
+	fd_set readfds;
+	while (TRUE) {
+		// Clear the socket set
+		FD_ZERO(&readfds);
 
-		// Check if max clients is reached
-		if ((client_count + 1) == MAX_CLIENTS) {
-			printf("<<MAX CLIENTS REACHED\n");
-			printf("<<REJECT ");
-			print_client_addr(client_addr);
-			printf("\n");
-			close(connfd);
+		//add master socket to set
+		FD_SET(masterfd, &readfds);
+
+		// Highest file descriptor number, need it for the select function
+		int max_sd = masterfd;
+
+		//add child sockets to set
+		for(int i = 0; i < MAX_CLIENTS; i++) {
+			Client* client = clients[i];
+			if(client) {
+				FD_SET(client->connfd, &readfds);
+				if(client->connfd > max_sd) {
+					max_sd = client->connfd;
+				}
+			}
 		}
-		else {
-			handle_client_connected(client_addr, connfd);
-			sleep(1);
+
+		// Wait for an activity on one of the sockets, timeout is NULL,
+		// so wait indefinitely
+		int activity = select(max_sd + 1 , &readfds , NULL , NULL , NULL);
+		if((activity < 0) && (errno != EINTR)) {
+			printf("select error");
+		}
+
+		// If something happened on the master socket,
+		// then its an incoming connection
+		if (FD_ISSET(masterfd, &readfds))
+		{
+			struct sockaddr_in address;
+			socklen_t addrlen = sizeof(address);
+			int connfd;
+			if ((connfd = accept(masterfd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+				perror("accept");
+				exit(EXIT_FAILURE);
+			}
+
+			// Check if max clients is reached
+			if ((client_count + 1) == MAX_CLIENTS) {
+				printf("<<REJECT %s:%d (MAX CLIENTS REACHED)\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+				close(connfd);
+			}
+			else {
+				handle_client_connected(address, connfd);
+			}
+		}
+
+		// Check if the clients have any data to read
+		for(int i = 0; i < MAX_CLIENTS; i++) {
+			Client* client = clients[i];
+			if(client) {
+				if (FD_ISSET(client->connfd , &readfds)) {
+					// Read a single message
+					Message message;
+					int length = 0;
+					char ch;
+					do {
+						int ret;
+						if((ret = read(client->connfd, &ch, 1)) == 0) {
+							handle_client_disconnected(client);
+							length = 0;
+							break;
+						}
+						if (ch == '\n') {
+							break;
+						}
+						message[length] = ch;
+						length++;
+						if (length == MESSAGE_SIZE) {
+							length = 0;
+							break;
+						}
+					} while(TRUE);
+
+					// Handle message
+					if(length > 0) {
+						//set the string terminating NULL byte on the end
+						//of the data read
+						message[length] = '\0';
+
+						// Send message to the other clients
+						Message out;
+						sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, message);
+						send_message(out, client->uid);
+					}
+				}
+			}
 		}
 	}
 }
