@@ -1,0 +1,51 @@
+local broadsock = require "broadsock.broadsock"
+
+
+local function connect(self, ip, port)
+	local client, err = broadsock.create(ip, port, function()
+		print("Lost connection to server")
+		msg.post(self.creator, "disconnected")
+		self.client = nil
+	end)
+	if err then
+		print("Unable to connect to server", err)
+		msg.post(self.creator, "disconnected")
+		return
+	end
+	self.client = client
+	msg.post(self.creator, "connected")
+end
+
+function final(self)
+	if self.client then
+		self.client.destroy()
+	end
+end
+
+function update(self, dt)
+	if self.client then
+		self.client.update()
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if not self.client then
+		if message_id == hash("connect") then
+			self.creator = sender
+			connect(self, message.ip, message.port)
+		end
+	else
+		if message_id == hash("register_gameobject") then
+			self.client.register_gameobject(message.id, message.type)
+		elseif message_id == hash("unregister_gameobject") then
+			self.client.unregister_gameobject(message.id)
+		elseif message_id == hash("register_factory") then
+			self.client.register_factory(message.url, message.type)
+		end
+	end
+end
+
+function on_reload(self)
+	-- Add reload-handling code here
+	-- Remove this function if not needed
+end
