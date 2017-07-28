@@ -116,15 +116,6 @@ void strip_newline(char *s) {
 	}
 }
 
-/* Print ip address */
-void print_client_addr(struct sockaddr_in addr) {
-	printf("%d.%d.%d.%d",
-		addr.sin_addr.s_addr & 0xFF,
-		(addr.sin_addr.s_addr & 0xFF00)>>8,
-		(addr.sin_addr.s_addr & 0xFF0000)>>16,
-		(addr.sin_addr.s_addr & 0xFF000000)>>24);
-}
-
 /**
  * Handle a disconnected client
  * This will remove the client from the queue and yield thread
@@ -280,7 +271,7 @@ int main(int argc, char *argv[]) {
 			Client* client = clients[i];
 			if(client) {
 				if (FD_ISSET(client->connfd , &readfds)) {
-					// Read a single message
+					// Read a single message, one byte at a time until linebreak
 					Message message;
 					int length = 0;
 					char ch;
@@ -304,11 +295,8 @@ int main(int argc, char *argv[]) {
 
 					// Handle message
 					if(length > 0) {
-						//set the string terminating NULL byte on the end
-						//of the data read
+						// Null terminate message and send to other clients
 						message[length] = '\0';
-
-						// Send message to the other clients
 						Message out;
 						sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, message);
 						send_message(out, client->uid);

@@ -6,7 +6,16 @@ json.encode = rxijson.encode
 
 local M = {}
 
+--- Create a broadsock instance
+-- @param ip
+-- @param port
+-- @param on_disconnect
+-- @return instance Instance or nil if something went wrong
+-- @return error_message
 function M.create(ip, port, on_disconnect)
+	assert(ip, "You must provide a server IP")
+	assert(port, "You must provide a server port")
+	assert(on_disconnect, "You must provide a disconnect callback")
 	local instance = {}
 
 	local clients = {}
@@ -87,12 +96,18 @@ function M.create(ip, port, on_disconnect)
 		return nil, err
 	end
 
+	--- Send data to the broadsock server
+	-- Note: The data will actually not be sent until update() is called
+	-- @param data
 	function instance.send(data)
 		if client then
 			client.send(data)
 		end
 	end
 
+	--- Update the broadsock client instance
+	-- Any registered game objects will send their transforms
+	-- This will also send any other queued data
 	function instance.update()
 		if client then
 			local message = { action = "GO", objects = {} }
@@ -121,6 +136,8 @@ function M.create(ip, port, on_disconnect)
 		end
 	end
 
+	--- Destroy this broadsock instance
+	-- Nothing can be done with the instance after this call
 	function instance.destroy()
 		if client then
 			client.destroy()
@@ -128,12 +145,24 @@ function M.create(ip, port, on_disconnect)
 		end
 	end
 
+	--- Register a game object with the instance
+	-- The game object transform will from this point on be sent to the server
+	-- and broadcast to any other client
+	-- @param id Id of the game object
+	-- @param type Type of game object. Must match a known factory type
 	function instance.register_gameobject(id, type)
+		assert(id, "You must provide a game object id")
+		assert(type and factories[type], "You must provide a known game object type")
 		go_uid_count = go_uid_count + 1
 		local gouid = tostring(uid) .. "_" .. go_uid_count
 		gameobjects[gouid] = { id = id, type = type, gouid = gouid }
 	end
 
+	--- Unregister a game object
+	-- The game object will no longer send its transform
+	-- This will result in a message to the server to notify connected clients
+	-- that the game object has been removed
+	-- @param id Id of the game object
 	function instance.unregister_gameobject(id)
 		for gouid,gameobject in pairs(gameobjects) do
 			if gameobject.id == id then
@@ -151,9 +180,17 @@ function M.create(ip, port, on_disconnect)
 				return
 			end
 		end
+		error("Unable to find game object")
 	end
 
+	--- Register a factory and associate it with a game object type
+	-- The factory will be used to create game objects that have been spawned
+	-- by a remote client
+	-- @param url URL of the factory
+	-- @param type Game object type
 	function instance.register_factory(url, type)
+		assert(url, "You must provide a factory URL")
+		assert(type, "You must provide a game object type")
 		factories[type] = url
 	end
 
