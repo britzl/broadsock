@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#include <aws/gamelift/server/GameLiftServerAPI.h>
 
 #define TRUE	1
 #define FALSE	0
@@ -169,13 +170,28 @@ void handle_client_connected(struct sockaddr_in client_addr, int connfd) {
 	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }\r\n", client->uid);
 	send_message_self(message, client->connfd);
 
-	// AcceptPlayerSession() ?
+	//The player session ID that GameLift has passed back to the player needs to be passed into this method and used in the API call below, I have left the parameter called playerSessionId to illustrate this.
+	//This is something that the client will need to pass to the server.
+	auto outcome = Aws::GameLift::Server::AcceptPlayerSession(playerSessionId);
+
+	if (outcome.IsSuccess())
+	{
+		return true;
+	}
+
+	printf("[GAMELIFT] AcceptPlayerSession Fail: %s\n", outcome.GetError().GetErrorMessage().c_str());
+	return false;
 }
 
 
 int main(int argc, char *argv[]) {
 
-	//InitSDK()
+	auto initOutcome = Aws::GameLift::Server::InitSDK();
+
+	if (!initOutcome.IsSuccess())
+		//return false; - Generally would have this method log and return a false bool, as the main method is an int type I have set to 0.
+		perror("GameLift InitSDK failed");
+		return 0;
 
 	// Create master socket
 	int masterfd;
@@ -212,7 +228,20 @@ int main(int argc, char *argv[]) {
 
 	printf("<[SERVER STARTED]>\n");
 
-	//ProcessReady()
+	auto processReadyParameter = Aws::GameLift::Server::ProcessParameters(
+		std::bind(&GameLiftManager::OnStartGameSession, this, std::placeholders::_1),
+		std::bind(&GameLiftManager::OnProcessTerminate, this),
+		std::bind(&GameLiftManager::OnHealthCheck, this),
+		PORT, Aws::GameLift::Server::LogParameters(logPaths)
+	);
+
+	auto readyOutcome = Aws::GameLift::Server::ProcessReady(processReadyParameter);
+	if (!readyOutcome.IsSuccess()) {
+		perror("GameLift ProcessReady failed");
+		return false;
+	}
+
+	printf("GAMELIFT] ProcessReady Success (Listen port:%d)\n", PORT);
 
 	// Accept clients
 	fd_set readfds;
@@ -305,4 +334,42 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+}
+
+// Implement callback functions
+void broadsock::onStartGameSession(Aws::GameLift::Model::GameSession myGameSession)
+{
+   // game-specific tasks when starting a new game session, such as loading map
+   	Aws::GameLift::Server::ActivateGameSession();
+
+	/// create a game session, in this server it may not be nessecary to do anything specific to create a new game session.
+
+	printf("[GAMELIFT] OnStartGameSession Success\n");
+}
+
+void broadsock::onProcessTerminate()
+{
+   // game-specific tasks required to gracefully shut down a game session,
+   // such as notifying players, preserving game state data, and other cleanup
+	printf("[GAMELIFT] OnProcessTerminate Success\n");
+
+	TerminateGameSession(0xDEAD);
+}
+
+void broadsock::TerminateGameSession(int exitCode)
+{
+	///< explicitly release ay game sessions
+
+	Aws::GameLift::Server::TerminateGameSession();
+
+	Aws::GameLift::Server::ProcessEnding();
+
+	::TerminateProcess(::GetCurrentProcess(), exitCode);
+}
+
+bool broadsock::onHealthCheck()
+{
+    bool health;
+    // complete health evaluation within 60 seconds and set health
+    return health;
 }
