@@ -3,6 +3,7 @@
  * And http://www.geeksforgeeks.org/socket-programming-in-cc-handling-multiple-clients-on-server-without-multi-threading/
  */
 
+#include <Broadsock.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -12,47 +13,34 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
-#include <aws/gamelift/server/GameLiftServerAPI.h>
 
 #define TRUE	1
 #define FALSE	0
 
-#define PORT 5000
-#define MAX_CLIENTS	5
 
-#define MESSAGE_SIZE 8192
-
-static unsigned int client_count = 0;
-static int uid = 10;
-
-typedef char Message[MESSAGE_SIZE];
-
-typedef struct {
-	struct sockaddr_in addr;
-	int connfd;
-	int uid;
-} Client;
-
-Client *clients[MAX_CLIENTS];
+Broadsock::Broadsock() {
+	clientCount = 0;
+	uid = 10;
+}
 
 /* Add client to queue */
-void queue_add(Client *client) {
+void Broadsock::QueueAdd(Client *client) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(!clients[i]) {
 			clients[i] = client;
-			client_count++;
+			clientCount++;
 			return;
 		}
 	}
 }
 
 /* Delete client from queue */
-void queue_delete(int uid) {
+void Broadsock::QueueDelete(int uid) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		if(clients[i]) {
 			if(clients[i]->uid == uid) {
 				clients[i] = NULL;
-				client_count--;
+				clientCount--;
 				return;
 			}
 		}
@@ -60,7 +48,7 @@ void queue_delete(int uid) {
 }
 
 /* Send message to all clients but the sender */
-void send_message(Message message, int uid) {
+void Broadsock::SendMessage(Message message, int uid) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		Client* client = clients[i];
 		if(client) {
@@ -72,7 +60,7 @@ void send_message(Message message, int uid) {
 }
 
 /* Send message to all clients */
-void send_message_all(Message message) {
+void Broadsock::SendMessageAll(Message message) {
 	for(int i=0;i<MAX_CLIENTS;i++) {
 		Client* client = clients[i];
 		if(client) {
@@ -82,7 +70,7 @@ void send_message_all(Message message) {
 }
 
 /* Send message to sender */
-void send_message_self(Message message, int connfd) {
+void Broadsock::SendMessageSelf(Message message, int connfd) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		Client* client = clients[i];
 		if(client) {
@@ -95,7 +83,7 @@ void send_message_self(Message message, int connfd) {
 }
 
 /* Send message to client */
-void send_message_client(Message message, int uid) {
+void Broadsock::SendMessageClient(Message message, int uid) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		Client* client = clients[i];
 		if(client) {
@@ -108,7 +96,7 @@ void send_message_client(Message message, int uid) {
 }
 
 /* Strip CRLF */
-void strip_newline(char *s) {
+void Broadsock::StripNewline(char *s) {
 	while(*s != '\0') {
 		if(*s == '\r' || *s == '\n') {
 			*s = '\0';
@@ -121,11 +109,11 @@ void strip_newline(char *s) {
  * Handle a disconnected client
  * This will remove the client from the queue and yield thread
  */
-void handle_client_disconnected(Client* client) {
+void Broadsock::HandleClientDisconnected(Client* client) {
 	// Notify connected clients of the disconnect
 	Message message;
 	sprintf(message, "{ \"event\": \"DISCONNECT\", \"uid\": %d }\r\n", client->uid);
-	send_message(message, client->uid);
+	SendMessage(message, client->uid);
 
 	printf("<<DISCONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
 
@@ -133,12 +121,12 @@ void handle_client_disconnected(Client* client) {
 	close(client->connfd);
 
 	// Delete client from queue
-	queue_delete(client->uid);
+	QueueDelete(client->uid);
 	free(client);
 
 	//RemovePlayerSession()
 
-	if (client_count == 0) {
+	if (clientCount == 0) {
 		//TerminateGameSession() ?
 		printf("All clients have disconnected\n");
 	}
@@ -148,7 +136,7 @@ void handle_client_disconnected(Client* client) {
  * Handle a connected client
  * This will create a Client struct and fork the thread
  */
-void handle_client_connected(struct sockaddr_in client_addr, int connfd) {
+bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd) {
 	Message message;
 
 	// Client settings
@@ -160,44 +148,30 @@ void handle_client_connected(struct sockaddr_in client_addr, int connfd) {
 	printf("<<CONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
 
 	// Add client to the queue
-	queue_add(client);
+	QueueAdd(client);
 
 	// Notify other clients of the new client
 	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": \"%s\", \"port\": %d }\r\n", client->uid, inet_ntoa(client_addr.sin_addr), client->addr.sin_port);
-	send_message(message, client->uid);
+	SendMessage(message, client->uid);
 
 	// Notify self of uid
 	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }\r\n", client->uid);
-	send_message_self(message, client->connfd);
+	SendMessageSelf(message, client->connfd);
+	return true;
+}
 
-	//The player session ID that GameLift has passed back to the player needs to be passed into this method and used in the API call below, I have left the parameter called playerSessionId to illustrate this.
-	//This is something that the client will need to pass to the server.
-	auto outcome = Aws::GameLift::Server::AcceptPlayerSession(playerSessionId);
-
-	if (outcome.IsSuccess())
-	{
-		return true;
-	}
-
-	printf("[GAMELIFT] AcceptPlayerSession Fail: %s\n", outcome.GetError().GetErrorMessage().c_str());
-	return false;
+void Broadsock::HandleClientMessage(Client* client, Message message) {
+	Message out;
+	sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, message);
+	SendMessage(out, client->uid);
 }
 
 
-int main(int argc, char *argv[]) {
-
-	auto initOutcome = Aws::GameLift::Server::InitSDK();
-
-	if (!initOutcome.IsSuccess())
-		//return false; - Generally would have this method log and return a false bool, as the main method is an int type I have set to 0.
-		perror("GameLift InitSDK failed");
-		return 0;
-
+bool Broadsock::Connect() {
 	// Create master socket
-	int masterfd;
 	if((masterfd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
 		perror("Socket creation failed");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	// Set master socket to allow multiple connections
@@ -205,44 +179,33 @@ int main(int argc, char *argv[]) {
 	if(setsockopt(masterfd, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 	{
 		perror("Socket setsockopt failed");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	// Socket settings
-	struct sockaddr_in server_addr;
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	server_addr.sin_port = htons(PORT);
+	struct sockaddr_in serverAddr;
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddr.sin_port = htons(PORT);
 
 	// Bind master socket
-	if(bind(masterfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+	if(bind(masterfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
 		perror("Socket binding failed");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	// Listen on master socket
 	if(listen(masterfd, 10) < 0) {
 		perror("Socket listening failed");
-		exit(EXIT_FAILURE);
+		return false;
 	}
 
 	printf("<[SERVER STARTED]>\n");
 
-	auto processReadyParameter = Aws::GameLift::Server::ProcessParameters(
-		std::bind(&GameLiftManager::OnStartGameSession, this, std::placeholders::_1),
-		std::bind(&GameLiftManager::OnProcessTerminate, this),
-		std::bind(&GameLiftManager::OnHealthCheck, this),
-		PORT, Aws::GameLift::Server::LogParameters(logPaths)
-	);
+	return true;
+}
 
-	auto readyOutcome = Aws::GameLift::Server::ProcessReady(processReadyParameter);
-	if (!readyOutcome.IsSuccess()) {
-		perror("GameLift ProcessReady failed");
-		return false;
-	}
-
-	printf("GAMELIFT] ProcessReady Success (Listen port:%d)\n", PORT);
-
+bool Broadsock::Start() {
 	// Accept clients
 	fd_set readfds;
 	while (TRUE) {
@@ -286,12 +249,12 @@ int main(int argc, char *argv[]) {
 			}
 
 			// Check if max clients is reached
-			if ((client_count + 1) == MAX_CLIENTS) {
+			if ((clientCount + 1) == MAX_CLIENTS) {
 				printf("<<REJECT %s:%d (MAX CLIENTS REACHED)\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 				close(connfd);
 			}
 			else {
-				handle_client_connected(address, connfd);
+				HandleClientConnected(address, connfd);
 			}
 		}
 
@@ -307,7 +270,7 @@ int main(int argc, char *argv[]) {
 					do {
 						int ret;
 						if((ret = read(client->connfd, &ch, 1)) == 0) {
-							handle_client_disconnected(client);
+							HandleClientDisconnected(client);
 							length = 0;
 							break;
 						}
@@ -326,50 +289,19 @@ int main(int argc, char *argv[]) {
 					if(length > 0) {
 						// Null terminate message and send to other clients
 						message[length] = '\0';
-						Message out;
-						sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, message);
-						send_message(out, client->uid);
+						HandleClientMessage(client, message);
 					}
 				}
 			}
 		}
 	}
+	return true;
 }
 
-// Implement callback functions
-void broadsock::onStartGameSession(Aws::GameLift::Model::GameSession myGameSession)
-{
-   // game-specific tasks when starting a new game session, such as loading map
-   	Aws::GameLift::Server::ActivateGameSession();
-
-	/// create a game session, in this server it may not be nessecary to do anything specific to create a new game session.
-
-	printf("[GAMELIFT] OnStartGameSession Success\n");
-}
-
-void broadsock::onProcessTerminate()
-{
-   // game-specific tasks required to gracefully shut down a game session,
-   // such as notifying players, preserving game state data, and other cleanup
-	printf("[GAMELIFT] OnProcessTerminate Success\n");
-
-	TerminateGameSession(0xDEAD);
-}
-
-void broadsock::TerminateGameSession(int exitCode)
-{
-	///< explicitly release ay game sessions
-
-	Aws::GameLift::Server::TerminateGameSession();
-
-	Aws::GameLift::Server::ProcessEnding();
-
-	::TerminateProcess(::GetCurrentProcess(), exitCode);
-}
-
-bool broadsock::onHealthCheck()
-{
-    bool health;
-    // complete health evaluation within 60 seconds and set health
-    return health;
+int main(int argc, char *argv[]) {
+	Broadsock broadsock;
+	if (!broadsock.Connect()) {
+		exit(EXIT_FAILURE);
+	}
+	broadsock.Start();
 }
