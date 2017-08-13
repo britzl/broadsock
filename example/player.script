@@ -21,10 +21,12 @@ function update(self, dt)
 end
 
 function on_input(self, action_id, action)
-	self.target_position = vmath.vector3(action.x, action.y, 0)
-	if action_id == hash("touch") then
-		if action.released then
-			factory.create("/factories#star", go.get_position() - vmath.vector3(0, 40, 0), nil, { remote = false })
+	if action.x >= 0 and action.x < 640 and action.y >= 0 and action.y < 1136 then
+		self.target_position = vmath.vector3(action.x, action.y, 0)
+		if action_id == hash("touch") then
+			if action.released then
+				factory.create("/factories#star", go.get_position() - vmath.vector3(0, 40, 0), nil, { remote = false })
+			end
 		end
 	end
 end
