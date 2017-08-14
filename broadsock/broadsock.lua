@@ -1,4 +1,6 @@
-local tcp_client = require "defnet.tcp_client"
+local socket = require "builtins.scripts.socket"
+local tcp_send_queue = require "defnet.tcp_send_queue"
+local tcp_reader = require "broadsock.util.tcp_reader"
 local b64 = require "broadsock.util.b64"
 local rxijson = require "broadsock.util.rxijson"
 json.encode = rxijson.encode
@@ -7,14 +9,14 @@ json.encode = rxijson.encode
 local M = {}
 
 --- Create a broadsock instance
--- @param ip
--- @param port
+-- @param server_ip
+-- @param server_port
 -- @param on_disconnect
 -- @return instance Instance or nil if something went wrong
 -- @return error_message
-function M.create(ip, port, on_disconnect)
-	assert(ip, "You must provide a server IP")
-	assert(port, "You must provide a server port")
+function M.create(server_ip, server_port, on_disconnect)
+	assert(server_ip, "You must provide a server IP")
+	assert(server_port, "You must provide a server port")
 	assert(on_disconnect, "You must provide a disconnect callback")
 	local instance = {}
 
@@ -28,6 +30,14 @@ function M.create(ip, port, on_disconnect)
 	local go_uid_count = 0
 
 	local uid = nil
+
+	local connection = {
+		socket = nil,
+		send_queue = nil,
+		socket_table = nil,
+		connected = false,
+	}
+
 
 	local function add_client(uid)
 		clients[uid] = { uid = uid }
@@ -91,60 +101,6 @@ function M.create(ip, port, on_disconnect)
 		end
 	end
 
-	local client, err = tcp_client.create(ip, port, on_data, on_disconnect)
-	if err then
-		return nil, err
-	end
-
-	--- Send data to the broadsock server
-	-- Note: The data will actually not be sent until update() is called
-	-- @param data
-	function instance.send(data)
-		if client then
-			client.send(data)
-		end
-	end
-
-	--- Update the broadsock client instance
-	-- Any registered game objects will send their transforms
-	-- This will also send any other queued data
-	function instance.update()
-		if client then
-			local message = { action = "GO", objects = {} }
-			for gouid,gameobject in pairs(gameobjects) do
-				local pos = go.get_position(gameobject.id)
-				local rot = go.get_rotation(gameobject.id)
-				local scale = go.get_scale(gameobject.id)
-				local object = {
-					gouid = gouid,
-					type = gameobject.type,
-					px = pos.x,
-					py = pos.y,
-					pz = pos.z,
-					rx = rot.x,
-					ry = rot.y,
-					rz = rot.z,
-					rw = rot.w,
-					sx = scale.x,
-					sy = scale.y,
-					sz = scale.z,
-				}
-				table.insert(message.objects, object)
-			end
-			client.send(b64.encode(json.encode(message)) .. "\n")
-			client.update()
-		end
-	end
-
-	--- Destroy this broadsock instance
-	-- Nothing can be done with the instance after this call
-	function instance.destroy()
-		if client then
-			client.destroy()
-			client = nil
-		end
-	end
-
 	--- Register a game object with the instance
 	-- The game object transform will from this point on be sent to the server
 	-- and broadcast to any other client
@@ -176,7 +132,7 @@ function M.create(ip, port, on_disconnect)
 						}
 					}
 				}
-				client.send(b64.encode(json.encode(message)) .. "\n")
+				instance.send(b64.encode(json.encode(message)))
 				return
 			end
 		end
@@ -193,6 +149,105 @@ function M.create(ip, port, on_disconnect)
 		assert(type, "You must provide a game object type")
 		factories[type] = url
 	end
+
+
+	--- Send data to the broadsock server
+	-- Note: The data will actually not be sent until update() is called
+	-- @param data
+	function instance.send(data)
+		if connection.connected then
+			local l = #data
+			local b1 = bit.rshift(bit.band(l, 0xFF000000), 24)
+			local b2 = bit.rshift(bit.band(l, 0x00FF0000), 16)
+			local b3 = bit.rshift(bit.band(l, 0x0000FF00), 8)
+			local b4 = bit.band(l, 0x000000FF)
+			connection.send_queue.add(string.char(b1, b2, b3, b4) .. data)
+		end
+	end
+
+	--- Update the broadsock client instance
+	-- Any registered game objects will send their transforms
+	-- This will also send any other queued data
+	function instance.update()
+		if connection.connected then
+			local message = { action = "GO", objects = {} }
+			for gouid,gameobject in pairs(gameobjects) do
+				local pos = go.get_position(gameobject.id)
+				local rot = go.get_rotation(gameobject.id)
+				local scale = go.get_scale(gameobject.id)
+				local object = {
+					gouid = gouid,
+					type = gameobject.type,
+					px = pos.x,
+					py = pos.y,
+					pz = pos.z,
+					rx = rot.x,
+					ry = rot.y,
+					rz = rot.z,
+					rw = rot.w,
+					sx = scale.x,
+					sy = scale.y,
+					sz = scale.z,
+				}
+				table.insert(message.objects, object)
+			end
+
+			instance.send(b64.encode(json.encode(message)))
+
+			-- check if the socket is ready for reading and/or writing
+			local receivet, sendt = socket.select(connection.socket_table, connection.socket_table, 0)
+
+			if sendt[connection.socket] then
+				local ok, err = connection.send_queue.send()
+				if not ok and err == "closed" then
+					instance.destroy()
+					on_disconnect()
+					return
+				end
+			end
+
+			if receivet[connection.socket] then
+				local ok, err = connection.reader.receive()
+				if not ok then
+					instance.destroy()
+					on_disconnect()
+					return
+				end
+			end
+		end
+	end
+
+	--- Destroy this broadsock instance
+	-- Nothing can be done with the instance after this call
+	function instance.destroy()
+		if connection.connected then
+			connection.socket:close()
+			connection.socket = nil
+			connection.send_queue = nil
+			connection.reader = nil
+			connection.socket_table = nil
+			connection.connected = false
+		end
+	end
+
+
+
+
+
+
+	local ok, err = pcall(function()
+		connection.socket = socket.tcp()
+		assert(connection.socket:connect(server_ip, server_port))
+		assert(connection.socket:settimeout(0))
+		connection.socket_table = { connection.socket }
+		connection.send_queue = tcp_send_queue.create(connection.socket, M.TCP_SEND_CHUNK_SIZE)
+		connection.reader = tcp_reader.create(connection.socket, on_data)
+	end)
+	if not ok or not connection.socket or not connection.send_queue then
+		print("tcp_client.create() error", err)
+		return nil, ("Unable to connect to %s:%d"):format(server_ip, server_port)
+	end
+	connection.connected = true
 
 	return instance
 end

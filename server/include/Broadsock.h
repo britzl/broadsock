@@ -34,6 +34,9 @@ class Broadsock {
 	void QueueAdd(Client *client);
 	/* Delete client from queue */
 	void QueueDelete(int uid);
+
+	void Send(int fd, Message message);
+
 	/* Send message to all clients but the sender */
 	void SendMessage(Message message, int uid);
 	/* Send message to all clients */

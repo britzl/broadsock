@@ -47,13 +47,26 @@ void Broadsock::QueueDelete(int uid) {
 	}
 }
 
+void Broadsock::Send(int fd, Message message) {
+	int length = strlen(message);
+	unsigned char b1 = (length & 0xFF000000) >> 24;
+	unsigned char b2 = (length & 0x00FF0000) >> 16;
+	unsigned char b3 = (length & 0x0000FF00) >> 8;
+	unsigned char b4 = length & 0x000000FF;
+	send(fd, &b1, 1, 0);
+	send(fd, &b2, 1, 0);
+	send(fd, &b3, 1, 0);
+	send(fd, &b4, 1, 0);
+	send(fd, message, strlen(message), 0);
+}
+
 /* Send message to all clients but the sender */
 void Broadsock::SendMessage(Message message, int uid) {
 	for(int i = 0; i < MAX_CLIENTS; i++) {
 		Client* client = clients[i];
 		if(client) {
 			if(client->uid != uid) {
-				send(client->connfd, message, strlen(message), 0);
+				Send(client->connfd, message);
 			}
 		}
 	}
@@ -64,7 +77,7 @@ void Broadsock::SendMessageAll(Message message) {
 	for(int i=0;i<MAX_CLIENTS;i++) {
 		Client* client = clients[i];
 		if(client) {
-			send(client->connfd, message, strlen(message), 0);
+			Send(client->connfd, message);
 		}
 	}
 }
@@ -75,7 +88,7 @@ void Broadsock::SendMessageSelf(Message message, int connfd) {
 		Client* client = clients[i];
 		if(client) {
 			if(client->connfd == connfd) {
-				send(client->connfd, message, strlen(message), 0);
+				Send(client->connfd, message);
 				return;
 			}
 		}
@@ -88,7 +101,7 @@ void Broadsock::SendMessageClient(Message message, int uid) {
 		Client* client = clients[i];
 		if(client) {
 			if(client->uid == uid) {
-				send(client->connfd, message, strlen(message), 0);
+				Send(client->connfd, message);
 				return;
 			}
 		}
@@ -112,7 +125,7 @@ void Broadsock::StripNewline(char *s) {
 void Broadsock::HandleClientDisconnected(Client* client) {
 	// Notify connected clients of the disconnect
 	Message message;
-	sprintf(message, "{ \"event\": \"DISCONNECT\", \"uid\": %d }\r\n", client->uid);
+	sprintf(message, "{ \"event\": \"DISCONNECT\", \"uid\": %d }", client->uid);
 	SendMessage(message, client->uid);
 
 	printf("<<DISCONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
@@ -151,18 +164,18 @@ bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd
 	QueueAdd(client);
 
 	// Notify other clients of the new client
-	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": \"%s\", \"port\": %d }\r\n", client->uid, inet_ntoa(client_addr.sin_addr), client->addr.sin_port);
+	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": \"%s\", \"port\": %d }", client->uid, inet_ntoa(client_addr.sin_addr), client->addr.sin_port);
 	SendMessage(message, client->uid);
 
 	// Notify self of uid
-	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }\r\n", client->uid);
+	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }", client->uid);
 	SendMessageSelf(message, client->connfd);
 	return true;
 }
 
 void Broadsock::HandleClientMessage(Client* client, Message message) {
 	Message out;
-	sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }\r\n", client->uid, message);
+	sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }", client->uid, message);
 	SendMessage(out, client->uid);
 }
 
@@ -263,34 +276,42 @@ bool Broadsock::Start() {
 			Client* client = clients[i];
 			if(client) {
 				if (FD_ISSET(client->connfd , &readfds)) {
-					// Read a single message, one byte at a time until linebreak
-					Message message;
-					int length = 0;
+					// Read message length
+					unsigned char len[4];
+					int ret = read(client->connfd, &len, 4);
+					if(ret == 0) {
+						HandleClientDisconnected(client);
+						continue;
+					}
+					int length = len[0] << 24 | len[1] << 16 | len[2] << 8 | len[3];
+
 					char ch;
-					do {
+					// Ignore messages that are too long
+					if(length > MESSAGE_SIZE) {
+						for(int i=0; i<length; i++) {
+							int ret;
+							if((ret = read(client->connfd, &ch, 1)) == 0) {
+								HandleClientDisconnected(client);
+								continue;
+							}
+						}
+						continue;
+					}
+
+					// Read the message
+					Message message;
+					for(int i=0; i<length; i++) {
 						int ret;
 						if((ret = read(client->connfd, &ch, 1)) == 0) {
 							HandleClientDisconnected(client);
-							length = 0;
-							break;
+							continue;
 						}
-						if (ch == '\n') {
-							break;
-						}
-						message[length] = ch;
-						length++;
-						if (length == MESSAGE_SIZE) {
-							length = 0;
-							break;
-						}
-					} while(TRUE);
+						message[i] = ch;
+					}
+					message[length] = '\0';
 
 					// Handle message
-					if(length > 0) {
-						// Null terminate message and send to other clients
-						message[length] = '\0';
-						HandleClientMessage(client, message);
-					}
+					HandleClientMessage(client, message);
 				}
 			}
 		}
