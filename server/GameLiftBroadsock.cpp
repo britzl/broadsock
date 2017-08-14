@@ -32,12 +32,13 @@ void GameLiftBroadsock::TerminateGameSession(int exitCode)
 
 	Aws::GameLift::Server::ProcessEnding();
 
-	::TerminateProcess(::GetCurrentProcess(), exitCode);
+	//::TerminateProcess(::GetCurrentProcess(), exitCode);
+	exit(exitCode);
 }
 
 bool GameLiftBroadsock::OnHealthCheck()
 {
-	bool health;
+	bool health = true;
 	// complete health evaluation within 60 seconds and set health
 	return health;
 }
@@ -55,11 +56,11 @@ bool GameLiftBroadsock::Connect() {
 	}
 
 	auto processReadyParameter = Aws::GameLift::Server::ProcessParameters(
-		std::bind(&::GameLiftBroadsock::OnStartGameSession, this, std::placeholders::_1),
-		std::bind(&::GameLiftBroadsock::OnProcessTerminate, this),
+		std::bind(&GameLiftBroadsock::OnStartGameSession, this, std::placeholders::_1),
+		std::bind(&GameLiftBroadsock::OnProcessTerminate, this),
 		std::bind(&GameLiftBroadsock::OnHealthCheck, this),
 		PORT,
-		Aws::GameLift::Server::LogParameters(LOG_PATHS)
+		Aws::GameLift::Server::LogParameters()
 	);
 
 	auto readyOutcome = Aws::GameLift::Server::ProcessReady(processReadyParameter);
@@ -69,6 +70,7 @@ bool GameLiftBroadsock::Connect() {
 	}
 
 	printf("GAMELIFT] ProcessReady Success (Listen port:%d)\n", PORT);
+	return true;
 }
 
 /*
