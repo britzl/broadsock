@@ -1,11 +1,11 @@
-CFLAGS = -O2 -lpthread
-CPPFLAGS = -std=c++11
+CFLAGS = -O2 -lpthreads
+CPPFLAGS = -std=c++11 -lstdc++
 
 broadsock:
-	$(CC) -Wall -Werror Broadsock.cpp $(CFLAGS) -o broadsock -Iinclude
+	$(CC) -g -Wall -Werror Broadsock.cpp $(CFLAGS) -o broadsock -Iinclude
 
 gamelift:
-	$(CC) GameLiftBroadsock.cpp lib/aws-cpp-sdk-gamelift-server.lib $(CFLAGS) $(CPPFLAGS) -o gamelift -Iinclude  -DGAMELIFT_USE_STD
+	$(CC) GameLiftBroadsock.cpp -Llib -laws-cpp-sdk-gamelift-server $(CFLAGS) $(CPPFLAGS) -o gamelift -Iinclude  -DGAMELIFT_USE_STD
 
 clean:
 	$(RM) -rf broadsock
