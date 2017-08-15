@@ -19,6 +19,9 @@
 
 
 Broadsock::Broadsock() {
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		clients[i] = 0;
+	}
 	clientCount = 0;
 	uid = 10;
 }
@@ -246,7 +249,7 @@ bool Broadsock::Start() {
 		// so wait indefinitely
 		int activity = select(max_sd + 1 , &readfds , NULL , NULL , NULL);
 		if((activity < 0) && (errno != EINTR)) {
-			printf("select error");
+			printf("select error\n");
 		}
 
 		// If something happened on the master socket,
