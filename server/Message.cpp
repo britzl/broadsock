@@ -12,14 +12,10 @@ int Message::MessageLength() {
 	return length;
 }
 char* Message::MessageContent() {
-	return &bytes[4];
-}
-
-char* Message::MessageBytes() {
 	return bytes;
 }
 
-/*int Message::ReadInt32() {
+int Message::ReadInt32() {
 	int b0 = bytes[index++];
 	int b1 = bytes[index++];
 	int b2 = bytes[index++];
@@ -27,14 +23,22 @@ char* Message::MessageBytes() {
 	return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
 }
 
-char[] Message::ReadString() {
+void Message::ReadString(char* out) {
 	int str_length = ReadInt32();
-	char str[str_length + 1];
-	memcpy(str, &bytes[index], str_length);
-	str[str_length] = 0;
+	memcpy(out, &bytes[index], str_length);
+	out[str_length] = 0;
 	index += str_length;
-	return str;
-}*/
+}
+
+void Message::WriteByte(char byte) {
+	bytes[index++] = byte;
+	length++;
+}
+
+void Message::WriteBytes(char* bytes, int byte_count) {
+	memcpy(&this->bytes[index], bytes, byte_count);
+	length += byte_count;
+}
 
 void Message::WriteInt32(int int32) {
 	bytes[index++] = (int32 & 0xFF000000) >> 24;
@@ -59,4 +63,12 @@ void Message::WriteNumber(int number) {
 	char buffer[20];
 	sprintf(buffer, "%d", number);
 	WriteString(buffer, strlen(buffer));
+}
+
+void Message::Dump() {
+	printf("BEGIN %d\n", length);
+	for(int i=0; i < length; i++) {
+		printf("  %d = %u (%c)\n", i, bytes[i], bytes[i]);
+	}
+	printf("END\n\n");
 }

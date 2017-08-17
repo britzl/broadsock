@@ -52,8 +52,17 @@ void Broadsock::QueueDelete(int uid) {
 }
 
 void Broadsock::Send(int fd, Message message) {
-	int total_length = 4 + message.MessageLength();
-	send(fd, message.MessageBytes(), total_length, 0);
+	int length = message.MessageLength();
+	char* bytes = message.MessageContent();
+	unsigned char b0 = (length & 0xFF000000) >> 24;
+	unsigned char b1 = (length & 0x00FF0000) >> 16;
+	unsigned char b2 = (length & 0x0000FF00) >> 8;
+	unsigned char b3 = (length & 0x000000FF);
+	send(fd, &b0, 1, 0);
+	send(fd, &b1, 1, 0);
+	send(fd, &b2, 1, 0);
+	send(fd, &b3, 1, 0);
+	send(fd, bytes, length, 0);
 }
 
 /* Send message to all clients but the sender */
@@ -163,20 +172,28 @@ bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd
 	connectMessage.WriteNullString("CONNECT\0");
 	connectMessage.WriteNullString(inet_ntoa(client_addr.sin_addr));
 	connectMessage.WriteNumber(client->addr.sin_port);
+	printf("Sending connect message\n");
 	SendMessageAll(connectMessage);
 
 	// Notify self of uid
 	Message uidMessage;
 	uidMessage.WriteNumber(client->uid);
 	uidMessage.WriteNullString("UID\0");
+	printf("Sending uid message\n");
 	SendMessageSelf(uidMessage, client->connfd);
+
+	Message readyMessage;
+	readyMessage.WriteNumber(client->uid);
+	readyMessage.WriteNullString("READY\0");
+	printf("Sending ready message\n");
+	SendMessageSelf(readyMessage, client->connfd);
 	return true;
 }
 
 void Broadsock::HandleClientMessage(Client* client, Message message) {
 	Message out;
 	out.WriteNumber(client->uid);
-	out.WriteString(message.MessageContent(), message.MessageLength());
+	out.WriteBytes(message.MessageContent(), message.MessageLength());
 	SendMessage(out, client->uid);
 }
 
@@ -286,7 +303,7 @@ bool Broadsock::Start() {
 					}
 					int length = len[0] << 24 | len[1] << 16 | len[2] << 8 | len[3];
 
-					char ch;
+					unsigned char ch;
 					// Ignore messages that are too long
 					if(length > MESSAGE_SIZE) {
 						for(int i=0; i<length; i++) {
@@ -301,14 +318,13 @@ bool Broadsock::Start() {
 
 					// Read the message
 					Message message;
-					char* messageBytes = message.MessageBytes();
 					for(int i=0; i<length; i++) {
 						int ret;
 						if((ret = read(client->connfd, &ch, 1)) == 0) {
 							HandleClientDisconnected(client);
 							continue;
 						}
-						messageBytes[i] = ch;
+						message.WriteByte(ch);
 					}
 
 					// Handle message

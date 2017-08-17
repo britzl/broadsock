@@ -10,13 +10,15 @@ local M = {}
 --- Create a broadsock instance
 -- @param server_ip
 -- @param server_port
+-- @param on_ready
 -- @param on_disconnect
 -- @return instance Instance or nil if something went wrong
 -- @return error_message
-function M.create(server_ip, server_port, on_disconnect)
+function M.create(server_ip, server_port, on_ready, on_disconnect)
 	assert(server_ip, "You must provide a server IP")
 	assert(server_port, "You must provide a server port")
-	assert(on_disconnect, "You must provide a disconnect callback")
+	assert(on_ready, "You must provide an on_ready callback")
+	assert(on_disconnect, "You must provide an on_disconnect callback")
 	local instance = {}
 
 	local clients = {}
@@ -52,7 +54,25 @@ function M.create(server_ip, server_port, on_disconnect)
 		remote_gameobjects[uid_to_remove] = nil
 	end
 
+	local function dump_data(data)
+		local s = ""
+		local i = 1
+		while true do
+			local length = stream.int32_to_number(data, i) i = i + 4
+			local str = data:sub(i, i + length) i = i + length
+			local foo = tostring(length) .. ":" .. tostring(str)
+			print(tostring(length) .. ":" .. tostring(str))
+			s  = s .. foo
+			if data:byte(i) == nil then
+				break
+			end
+		end
+		return s
+	end
+
+
 	local function on_data(data)
+		--dump_data(data)
 		local sr = stream.reader(data)
 		local from_uid = sr.number()
 		local event = sr.string()
@@ -69,7 +89,7 @@ function M.create(server_ip, server_port, on_disconnect)
 				local type = sr.string()
 
 				local pos = sr.vector3()
-				local rot = sr.vector3()
+				local rot = sr.quat()
 				local scale = sr.vector3()
 				if not remote_gameobjects_for_user[gouid] then
 					local id = factory.create(factories[type], pos, rot, {}, scale)
@@ -92,11 +112,16 @@ function M.create(server_ip, server_port, on_disconnect)
 			print("CONNECT")
 			add_client(from_uid)
 		elseif event == "UID" then
-			print("UID")
+			print("UID", from_uid)
 			uid = from_uid
+		elseif event == "READY" then
+			print("READY")
+			on_ready()
 		elseif event == "DISCONNECT" then
 			print("DISCONNECT")
 			remove_client(from_uid)
+		else
+			print("WARN: Unknown event", event)
 		end
 	end
 
@@ -149,7 +174,7 @@ function M.create(server_ip, server_port, on_disconnect)
 	-- @param data
 	function instance.send(data)
 		if connection.connected then
-			connection.send_queue.add(number_to_int32(#data) .. data)
+			connection.send_queue.add(stream.number_to_int32(#data) .. data)
 		end
 	end
 
@@ -168,7 +193,7 @@ function M.create(server_ip, server_port, on_disconnect)
 				sw.string(gouid)
 				sw.string(gameobject.type)
 				sw.vector3(pos)
-				sw.vector3(rot)
+				sw.quat(rot)
 				sw.vector3(scale)
 			end
 			instance.send(sw.tostring())

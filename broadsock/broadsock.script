@@ -3,6 +3,10 @@ local broadsock = require "broadsock.broadsock"
 
 local function connect(self, ip, port)
 	local client, err = broadsock.create(ip, port, function()
+		print("Ready")
+		msg.post(self.creator, "ready")
+	end,
+	function()
 		print("Lost connection to server")
 		msg.post(self.creator, "disconnected")
 		self.client = nil
@@ -13,7 +17,6 @@ local function connect(self, ip, port)
 		return
 	end
 	self.client = client
-	msg.post(self.creator, "connected")
 end
 
 function final(self)
