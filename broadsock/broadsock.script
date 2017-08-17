@@ -1,16 +1,34 @@
 local broadsock = require "broadsock.broadsock"
+local stream = require "broadsock.util.stream"
 
+local function on_disconnected(self)
+	print("On disconnected")
+	msg.post(self.creator, "disconnected")
+	self.client = nil
+end
+
+local function on_connected(self)
+	print("On connected")
+	msg.post(self.creator, "connected")
+end
+
+local function on_event(self, event, from_uid, stream_reader)
+	print("On event")
+	msg.post(self.creator, "event", { event = event, from = from_uid })
+end
 
 local function connect(self, ip, port)
-	local client, err = broadsock.create(ip, port, function()
-		print("Ready")
-		msg.post(self.creator, "ready")
-	end,
-	function()
-		print("Lost connection to server")
-		msg.post(self.creator, "disconnected")
-		self.client = nil
-	end)
+	-- wrap callback function and pass self as first argument
+	local function callback(fn)
+		return function(...) fn(self, ...) end
+	end
+	
+	local client, err = broadsock.create(
+		ip, port,
+		callback(on_event),
+		callback(on_connected),
+		callback(on_disconnected))
+
 	if err then
 		print("Unable to connect to server", err)
 		msg.post(self.creator, "disconnected")
@@ -44,6 +62,18 @@ function on_message(self, message_id, message, sender)
 			self.client.unregister_gameobject(message.id)
 		elseif message_id == hash("register_factory") then
 			self.client.register_factory(message.url, message.type)
+		elseif message_id == hash("send_message") then
+			local sw = stream.writer()
+			for _,value in ipairs(message) do
+				if type(value) == "string" then
+					sw.string(value)
+				elseif type(value) == "number" then
+					sw.number(value)
+				else
+					error("Invalid type when writing to stream")
+				end
+			end
+			self.client.send(sw.tostring())
 		end
 	end
 end

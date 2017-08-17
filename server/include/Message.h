@@ -13,6 +13,8 @@ public:
 	int MessageLength();
 	char* MessageContent();
 
+	void Rewind();
+
 	int ReadInt32();
 	void ReadString(char* out);
 

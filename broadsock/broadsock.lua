@@ -10,14 +10,15 @@ local M = {}
 --- Create a broadsock instance
 -- @param server_ip
 -- @param server_port
--- @param on_ready
+-- @param on_connected
 -- @param on_disconnect
 -- @return instance Instance or nil if something went wrong
 -- @return error_message
-function M.create(server_ip, server_port, on_ready, on_disconnect)
+function M.create(server_ip, server_port, on_event, on_connected, on_disconnect)
 	assert(server_ip, "You must provide a server IP")
 	assert(server_port, "You must provide a server port")
-	assert(on_ready, "You must provide an on_ready callback")
+	assert(on_event, "You must provide an on_event callback")
+	assert(on_connected, "You must provide an on_connected callback")
 	assert(on_disconnect, "You must provide an on_disconnect callback")
 	local instance = {}
 
@@ -71,9 +72,9 @@ function M.create(server_ip, server_port, on_ready, on_disconnect)
 	end
 
 
-	local function on_data(data)
+	local function on_data(data, data_length)
 		--dump_data(data)
-		local sr = stream.reader(data)
+		local sr = stream.reader(data, data_length)
 		local from_uid = sr.number()
 		local event = sr.string()
 
@@ -93,35 +94,50 @@ function M.create(server_ip, server_port, on_ready, on_disconnect)
 				local scale = sr.vector3()
 				if not remote_gameobjects_for_user[gouid] then
 					local id = factory.create(factories[type], pos, rot, {}, scale)
-					remote_gameobjects_for_user[gouid] = { id = id }
+					remote_gameobjects_for_user[gouid] = { id = id, type = type }
 				else
 					local id = remote_gameobjects_for_user[gouid].id
-					go.set_position(pos, id)
-					go.set_rotation(rot, id)
-					go.set_scale(scale, id)
+					local ok, err = pcall(function()
+						go.set_position(pos, id)
+						go.set_rotation(rot, id)
+						go.set_scale(scale, id)
+					end)
+					if not ok then
+						for k,v in pairs(remote_gameobjects_for_user) do
+							print("   EXISTING REMOTE GO", k, v.id, v.type)
+						end
+					end
 				end
 			end
 		elseif event == "GOD" then
 			if clients[from_uid] then
 				local gouid = sr.string()
 				local remote_gameobjects_for_user = remote_gameobjects[from_uid]
-				go.delete(remote_gameobjects_for_user[gouid].id)
+				local id = remote_gameobjects_for_user[gouid].id
+				local ok, err = pcall(function()
+					go.delete(id)
+				end)
+				if not ok then
+					for k,v in pairs(remote_gameobjects_for_user) do
+					end
+				end
 				remote_gameobjects_for_user[gouid] = nil
 			end
-		elseif event == "CONNECT" then
+		elseif event == "CONNECT_OTHER" then
 			print("CONNECT")
 			add_client(from_uid)
-		elseif event == "UID" then
-			print("UID", from_uid)
+		elseif event == "CONNECT_SELF" then
+			print("CONNECT")
+			add_client(from_uid)
 			uid = from_uid
-		elseif event == "READY" then
-			print("READY")
-			on_ready()
+			on_connected()
 		elseif event == "DISCONNECT" then
 			print("DISCONNECT")
 			remove_client(from_uid)
 		else
-			print("WARN: Unknown event", event)
+			print("CUSTOM EVENT", event)
+			local event_data, event_length = sr.rest()
+			on_event(event, from_uid, stream.reader(event_data, event_length))
 		end
 	end
 

@@ -44,7 +44,7 @@ function M.create(socket, on_data)
 			local b4 = length_str:byte(4)
 			local length = bit.lshift(b1, 24) + bit.lshift(b2, 16) + bit.lshift(b3, 8) + b4
 			local data = receive(length)
-			on_data(data)
+			on_data(data, length)
 		end
 	end)
 

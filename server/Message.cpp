@@ -15,6 +15,11 @@ char* Message::MessageContent() {
 	return bytes;
 }
 
+
+void Message::Rewind() {
+	index = 0;
+}
+
 int Message::ReadInt32() {
 	int b0 = bytes[index++];
 	int b1 = bytes[index++];

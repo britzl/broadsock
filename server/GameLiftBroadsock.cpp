@@ -73,15 +73,33 @@ bool GameLiftBroadsock::Connect() {
 	return true;
 }
 
-/*
 
-	//The player session ID that GameLift has passed back to the player needs to be passed into this method and used in the API call below, I have left the parameter called playerSessionId to illustrate this.
-	//This is something that the client will need to pass to the server.
-	auto outcome = Aws::GameLift::Server::AcceptPlayerSession(playerSessionId);
-	if (!outcome.IsSuccess())
-	{
-		printf("[GAMELIFT] AcceptPlayerSession Fail: %s\n", outcome.GetError().GetErrorMessage().c_str());
-		return false;
+void GameLiftBroadsock::HandleClientMessage(Client* client, Message message) {
+	char buffer[100];
+	message.ReadString(buffer);
+	if(strcmp("GL_CLAIM_PLAYER_SESSION", buffer) == 0) {
+		message.ReadString(buffer);
+		//The player session ID that GameLift has passed back to the player needs to be passed into this method and used in the API call below, I have left the parameter called playerSessionId to illustrate this.
+		//This is something that the client will need to pass to the server.
+		auto outcome = Aws::GameLift::Server::AcceptPlayerSession(buffer);
+		if (!outcome.IsSuccess())
+		{
+			printf("[GAMELIFT] AcceptPlayerSession Fail: %s\n", outcome.GetError().GetErrorMessage().c_str());
+			Message playerSessionFailedMessage;
+			playerSessionFailedMessage.WriteNumber(client->uid);
+			playerSessionFailedMessage.WriteNullString("GL_CLAIM_PLAYER_SESSION_FAILED");
+			SendMessageSelf(playerSessionFailedMessage, client->connfd);
+		}
+		else {
+			printf("[GAMELIFT] AcceptPlayerSession Success\n");
+			Message playerSessionSuccessMessage;
+			playerSessionSuccessMessage.WriteNumber(client->uid);
+			playerSessionSuccessMessage.WriteNullString("GL_CLAIM_PLAYER_SESSION_SUCCESS");
+			SendMessageSelf(playerSessionSuccessMessage, client->connfd);
+		}
 	}
-
-*/
+	else {
+		message.Rewind();
+		Broadsock::HandleClientMessage(client, message);
+	}
+}

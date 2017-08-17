@@ -33,6 +33,7 @@ class Broadsock {
 
 	void Send(int fd, Message message);
 
+protected:
 	/* Send message to all clients but the sender */
 	void SendMessage(Message message, int uid);
 	/* Send message to all clients */
@@ -41,8 +42,7 @@ class Broadsock {
 	void SendMessageSelf(Message message, int connfd);
 	/* Send message to client */
 	void SendMessageClient(Message message, int uid);
-	/* Strip CRLF */
-	void StripNewline(char *s);
+
 	/**
 	 * Handle a disconnected client
 	 * This will remove the client from the queue and yield thread

@@ -19,7 +19,7 @@ end
 
 
 
-function M.reader(str)
+function M.reader(str, str_length)
 	local instance = {}
 
 	local index = 1
@@ -49,6 +49,18 @@ function M.reader(str)
 		local z = instance.number()
 		local w = instance.number()
 		return vmath.quat(x, y, z, w)
+	end
+	
+	function instance.rest()
+		return str:sub(index, str_length), 1 + str_length - index
+	end
+	
+	function instance.raw()
+		return str
+	end
+	
+	function instance.length()
+		return str_length
 	end
 
 	return instance

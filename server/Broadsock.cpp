@@ -113,16 +113,6 @@ void Broadsock::SendMessageClient(Message message, int uid) {
 	}
 }
 
-/* Strip CRLF */
-void Broadsock::StripNewline(char *s) {
-	while(*s != '\0') {
-		if(*s == '\r' || *s == '\n') {
-			*s = '\0';
-		}
-		s++;
-	}
-}
-
 /**
  * Handle a disconnected client
  * This will remove the client from the queue and yield thread
@@ -167,26 +157,20 @@ bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd
 	QueueAdd(client);
 
 	// Notify all clients of the new client
-	Message connectMessage;
-	connectMessage.WriteNumber(client->uid);
-	connectMessage.WriteNullString("CONNECT\0");
-	connectMessage.WriteNullString(inet_ntoa(client_addr.sin_addr));
-	connectMessage.WriteNumber(client->addr.sin_port);
-	printf("Sending connect message\n");
-	SendMessageAll(connectMessage);
+	Message connectOtherMessage;
+	connectOtherMessage.WriteNumber(client->uid);
+	connectOtherMessage.WriteNullString("CONNECT_OTHER\0");
+	connectOtherMessage.WriteNullString(inet_ntoa(client_addr.sin_addr));
+	connectOtherMessage.WriteNumber(client->addr.sin_port);
+	printf("Sending connectOtherMessage message\n");
+	SendMessage(connectOtherMessage, client->uid);
 
 	// Notify self of uid
-	Message uidMessage;
-	uidMessage.WriteNumber(client->uid);
-	uidMessage.WriteNullString("UID\0");
-	printf("Sending uid message\n");
-	SendMessageSelf(uidMessage, client->connfd);
-
-	Message readyMessage;
-	readyMessage.WriteNumber(client->uid);
-	readyMessage.WriteNullString("READY\0");
-	printf("Sending ready message\n");
-	SendMessageSelf(readyMessage, client->connfd);
+	Message connectSelfMessage;
+	connectSelfMessage.WriteNumber(client->uid);
+	connectSelfMessage.WriteNullString("CONNECT_SELF\0");
+	printf("Sending connectSelfMessage message\n");
+	SendMessageSelf(connectSelfMessage, client->connfd);
 	return true;
 }
 
