@@ -1,12 +1,11 @@
 local socket = require "builtins.scripts.socket"
 local tcp_send_queue = require "defnet.tcp_send_queue"
 local tcp_reader = require "broadsock.util.tcp_reader"
-local b64 = require "broadsock.util.b64"
-local rxijson = require "broadsock.util.rxijson"
-json.encode = rxijson.encode
+local stream = require "broadsock.util.stream"
 
 
 local M = {}
+
 
 --- Create a broadsock instance
 -- @param server_ip
@@ -23,11 +22,12 @@ function M.create(server_ip, server_port, on_disconnect)
 	local clients = {}
 
 	local gameobjects = {}
+	local gameobject_count = 0
 	local remote_gameobjects = {}
 
 	local factories = {}
 
-	local go_uid_count = 0
+	local go_uid_sequence = 0
 
 	local uid = nil
 
@@ -39,65 +39,64 @@ function M.create(server_ip, server_port, on_disconnect)
 	}
 
 
-	local function add_client(uid)
-		clients[uid] = { uid = uid }
-		remote_gameobjects[uid] = {}
+	local function add_client(uid_to_add)
+		clients[uid_to_add] = { uid = uid_to_add }
+		remote_gameobjects[uid_to_add] = {}
 	end
 
-	local function remove_client(uid)
-		clients[uid] = nil
-		for _,gameobject in pairs(remote_gameobjects[uid]) do
+	local function remove_client(uid_to_remove)
+		clients[uid_to_remove] = nil
+		for _,gameobject in pairs(remote_gameobjects[uid_to_remove]) do
 			go.delete(gameobject.id)
 		end
-		remote_gameobjects[uid] = nil
+		remote_gameobjects[uid_to_remove] = nil
 	end
 
-	local function on_data(json_data)
-		local ok, message = pcall(json.decode, json_data)
-		if not ok then
-			return
-		end
+	local function on_data(data)
+		local sr = stream.reader(data)
+		local from_uid = sr.number()
+		local event = sr.string()
 
-		if message.event == "DATA" then
-			if not clients[message.uid] then
-				add_client(message.uid)
+		if event == "GO" then
+			if not clients[from_uid] then
+				add_client(from_uid)
 			end
 
-			local data = json.decode(b64.decode(message.data))
-			if data.action == "GO" then
-				local remote_gameobjects_for_user = remote_gameobjects[message.uid]
-				for _,gameobject in pairs(data.objects) do
-					local gouid = gameobject.gouid
-					if gameobject.deleted then
-						go.delete(remote_gameobjects_for_user[gouid].id)
-						remote_gameobjects_for_user[gouid] = nil
-					else
-						local type = gameobject.type
-						local pos = vmath.vector3(gameobject.px, gameobject.py, gameobject.pz)
-						local rot = vmath.quat(gameobject.rx, gameobject.ry, gameobject.rz, gameobject.rw)
-						local scale = vmath.vector3(gameobject.sx, gameobject.sy, gameobject.sz)
-						if not remote_gameobjects_for_user[gouid] then
-							local id = factory.create(factories[type], pos, rot, {}, scale)
-							remote_gameobjects_for_user[gouid] = { id = id }
-						else
-							local id = remote_gameobjects_for_user[gouid].id
-							go.set_position(pos, id)
-							go.set_rotation(rot, id)
-							go.set_scale(scale, id)
-						end
-					end
+			local remote_gameobjects_for_user = remote_gameobjects[from_uid]
+			local count = sr.number()
+			for _=1,count do
+				local gouid = sr.string()
+				local type = sr.string()
+
+				local pos = sr.vector3()
+				local rot = sr.vector3()
+				local scale = sr.vector3()
+				if not remote_gameobjects_for_user[gouid] then
+					local id = factory.create(factories[type], pos, rot, {}, scale)
+					remote_gameobjects_for_user[gouid] = { id = id }
+				else
+					local id = remote_gameobjects_for_user[gouid].id
+					go.set_position(pos, id)
+					go.set_rotation(rot, id)
+					go.set_scale(scale, id)
 				end
 			end
-
-		elseif message.event == "CONNECT" then
-			print("CONNECT")
-			if not message.ip then
-				uid = message.uid
+		elseif event == "GOD" then
+			if clients[from_uid] then
+				local gouid = sr.string()
+				local remote_gameobjects_for_user = remote_gameobjects[from_uid]
+				go.delete(remote_gameobjects_for_user[gouid].id)
+				remote_gameobjects_for_user[gouid] = nil
 			end
-			add_client(message.uid)
-		elseif message.event == "DISCONNECT" then
+		elseif event == "CONNECT" then
+			print("CONNECT")
+			add_client(from_uid)
+		elseif event == "UID" then
+			print("UID")
+			uid = from_uid
+		elseif event == "DISCONNECT" then
 			print("DISCONNECT")
-			remove_client(message.uid)
+			remove_client(from_uid)
 		end
 	end
 
@@ -109,9 +108,10 @@ function M.create(server_ip, server_port, on_disconnect)
 	function instance.register_gameobject(id, type)
 		assert(id, "You must provide a game object id")
 		assert(type and factories[type], "You must provide a known game object type")
-		go_uid_count = go_uid_count + 1
-		local gouid = tostring(uid) .. "_" .. go_uid_count
+		go_uid_sequence = go_uid_sequence + 1
+		local gouid = tostring(uid) .. "_" .. go_uid_sequence
 		gameobjects[gouid] = { id = id, type = type, gouid = gouid }
+		gameobject_count = gameobject_count + 1
 	end
 
 	--- Unregister a game object
@@ -123,16 +123,8 @@ function M.create(server_ip, server_port, on_disconnect)
 		for gouid,gameobject in pairs(gameobjects) do
 			if gameobject.id == id then
 				gameobjects[gouid] = nil
-				local message = {
-					action = "GO",
-					objects = {
-						{
-							gouid = gouid,
-							deleted = true,
-						}
-					}
-				}
-				instance.send(b64.encode(json.encode(message)))
+				gameobject_count = gameobject_count - 1
+				instance.send(stream.writer().string("GOD").string(gouid).tostring())
 				return
 			end
 		end
@@ -151,17 +143,13 @@ function M.create(server_ip, server_port, on_disconnect)
 	end
 
 
+
 	--- Send data to the broadsock server
 	-- Note: The data will actually not be sent until update() is called
 	-- @param data
 	function instance.send(data)
 		if connection.connected then
-			local l = #data
-			local b1 = bit.rshift(bit.band(l, 0xFF000000), 24)
-			local b2 = bit.rshift(bit.band(l, 0x00FF0000), 16)
-			local b3 = bit.rshift(bit.band(l, 0x0000FF00), 8)
-			local b4 = bit.band(l, 0x000000FF)
-			connection.send_queue.add(string.char(b1, b2, b3, b4) .. data)
+			connection.send_queue.add(number_to_int32(#data) .. data)
 		end
 	end
 
@@ -170,29 +158,20 @@ function M.create(server_ip, server_port, on_disconnect)
 	-- This will also send any other queued data
 	function instance.update()
 		if connection.connected then
-			local message = { action = "GO", objects = {} }
+			local sw = stream.writer()
+			sw.string("GO")
+			sw.number(gameobject_count)
 			for gouid,gameobject in pairs(gameobjects) do
 				local pos = go.get_position(gameobject.id)
 				local rot = go.get_rotation(gameobject.id)
 				local scale = go.get_scale(gameobject.id)
-				local object = {
-					gouid = gouid,
-					type = gameobject.type,
-					px = pos.x,
-					py = pos.y,
-					pz = pos.z,
-					rx = rot.x,
-					ry = rot.y,
-					rz = rot.z,
-					rw = rot.w,
-					sx = scale.x,
-					sy = scale.y,
-					sz = scale.z,
-				}
-				table.insert(message.objects, object)
+				sw.string(gouid)
+				sw.string(gameobject.type)
+				sw.vector3(pos)
+				sw.vector3(rot)
+				sw.vector3(scale)
 			end
-
-			instance.send(b64.encode(json.encode(message)))
+			instance.send(sw.tostring())
 
 			-- check if the socket is ready for reading and/or writing
 			local receivet, sendt = socket.select(connection.socket_table, connection.socket_table, 0)
@@ -229,9 +208,6 @@ function M.create(server_ip, server_port, on_disconnect)
 			connection.connected = false
 		end
 	end
-
-
-
 
 
 

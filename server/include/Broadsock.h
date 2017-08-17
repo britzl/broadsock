@@ -1,15 +1,11 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <Message.h>
 
 
 #define MAX_CLIENTS	5
-#define MESSAGE_SIZE 8192
-
 #define PORT 5000
-
-
-typedef char Message[MESSAGE_SIZE];
 
 typedef struct {
 	struct sockaddr_in addr;

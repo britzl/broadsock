@@ -4,6 +4,7 @@
  */
 
 #include <Broadsock.h>
+#include <Message.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -51,16 +52,8 @@ void Broadsock::QueueDelete(int uid) {
 }
 
 void Broadsock::Send(int fd, Message message) {
-	int length = strlen(message);
-	unsigned char b1 = (length & 0xFF000000) >> 24;
-	unsigned char b2 = (length & 0x00FF0000) >> 16;
-	unsigned char b3 = (length & 0x0000FF00) >> 8;
-	unsigned char b4 = length & 0x000000FF;
-	send(fd, &b1, 1, 0);
-	send(fd, &b2, 1, 0);
-	send(fd, &b3, 1, 0);
-	send(fd, &b4, 1, 0);
-	send(fd, message, strlen(message), 0);
+	int total_length = 4 + message.MessageLength();
+	send(fd, message.MessageBytes(), total_length, 0);
 }
 
 /* Send message to all clients but the sender */
@@ -126,10 +119,12 @@ void Broadsock::StripNewline(char *s) {
  * This will remove the client from the queue and yield thread
  */
 void Broadsock::HandleClientDisconnected(Client* client) {
+
 	// Notify connected clients of the disconnect
-	Message message;
-	sprintf(message, "{ \"event\": \"DISCONNECT\", \"uid\": %d }", client->uid);
-	SendMessage(message, client->uid);
+	Message disconnectMessage;
+	disconnectMessage.WriteNumber(client->uid);
+	disconnectMessage.WriteNullString("DISCONNECT\0");
+	SendMessage(disconnectMessage, client->uid);
 
 	printf("<<DISCONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
 
@@ -139,8 +134,6 @@ void Broadsock::HandleClientDisconnected(Client* client) {
 	// Delete client from queue
 	QueueDelete(client->uid);
 	free(client);
-
-	//RemovePlayerSession()
 
 	if (clientCount == 0) {
 		//TerminateGameSession() ?
@@ -153,8 +146,6 @@ void Broadsock::HandleClientDisconnected(Client* client) {
  * This will create a Client struct and fork the thread
  */
 bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd) {
-	Message message;
-
 	// Client settings
 	Client *client = (Client *)malloc(sizeof(Client));
 	client->addr = client_addr;
@@ -166,19 +157,26 @@ bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd
 	// Add client to the queue
 	QueueAdd(client);
 
-	// Notify other clients of the new client
-	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d, \"ip\": \"%s\", \"port\": %d }", client->uid, inet_ntoa(client_addr.sin_addr), client->addr.sin_port);
-	SendMessage(message, client->uid);
+	// Notify all clients of the new client
+	Message connectMessage;
+	connectMessage.WriteNumber(client->uid);
+	connectMessage.WriteNullString("CONNECT\0");
+	connectMessage.WriteNullString(inet_ntoa(client_addr.sin_addr));
+	connectMessage.WriteNumber(client->addr.sin_port);
+	SendMessageAll(connectMessage);
 
 	// Notify self of uid
-	sprintf(message, "{ \"event\": \"CONNECT\", \"uid\": %d }", client->uid);
-	SendMessageSelf(message, client->connfd);
+	Message uidMessage;
+	uidMessage.WriteNumber(client->uid);
+	uidMessage.WriteNullString("UID\0");
+	SendMessageSelf(uidMessage, client->connfd);
 	return true;
 }
 
 void Broadsock::HandleClientMessage(Client* client, Message message) {
 	Message out;
-	sprintf(out, "{ \"event\": \"DATA\", \"uid\": %d, \"data\": \"%s\" }", client->uid, message);
+	out.WriteNumber(client->uid);
+	out.WriteString(message.MessageContent(), message.MessageLength());
 	SendMessage(out, client->uid);
 }
 
@@ -303,15 +301,15 @@ bool Broadsock::Start() {
 
 					// Read the message
 					Message message;
+					char* messageBytes = message.MessageBytes();
 					for(int i=0; i<length; i++) {
 						int ret;
 						if((ret = read(client->connfd, &ch, 1)) == 0) {
 							HandleClientDisconnected(client);
 							continue;
 						}
-						message[i] = ch;
+						messageBytes[i] = ch;
 					}
-					message[length] = '\0';
 
 					// Handle message
 					HandleClientMessage(client, message);
