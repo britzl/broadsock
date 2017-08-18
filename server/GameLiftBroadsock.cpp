@@ -1,6 +1,7 @@
 #include <GameLiftBroadsock.h>
 #include <aws/gamelift/server/GameLiftServerAPI.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define LOG_PATHS "."
 
