@@ -106,11 +106,6 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 						go.set_rotation(rot, id)
 						go.set_scale(scale, id)
 					end)
-					if not ok then
-						for k,v in pairs(remote_gameobjects_for_user) do
-							print("   EXISTING REMOTE GO", k, v.id, v.type)
-						end
-					end
 				end
 			end
 		elseif msg_id == "GOD" then
@@ -121,10 +116,6 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 				local ok, err = pcall(function()
 					go.delete(id)
 				end)
-				if not ok then
-					for k,v in pairs(remote_gameobjects_for_user) do
-					end
-				end
 				remote_gameobjects_for_user[gouid] = nil
 			end
 		elseif msg_id == "CONNECT_OTHER" then
