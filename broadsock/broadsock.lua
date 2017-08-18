@@ -94,8 +94,11 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 				local rot = sr.quat()
 				local scale = sr.vector3()
 				if not remote_gameobjects_for_user[gouid] then
-					local id = factory.create(factories[type], pos, rot, {}, scale)
-					remote_gameobjects_for_user[gouid] = { id = id, type = type }
+					local factory_url = factories[type]
+					if factory_url then
+						local id = factory.create(factory_url, pos, rot, {}, scale)
+						remote_gameobjects_for_user[gouid] = { id = id, type = type }
+					end
 				else
 					local id = remote_gameobjects_for_user[gouid].id
 					local ok, err = pcall(function()
