@@ -8,6 +8,7 @@
 // Implement callback functions
 void GameLiftBroadsock::OnStartGameSession(Aws::GameLift::Server::Model::GameSession myGameSession)
 {
+	printf("[GAMELIFT] OnStartGameSession\n");
 	// game-specific tasks when starting a new game session, such as loading map
 	Aws::GameLift::Server::ActivateGameSession();
 
@@ -17,6 +18,7 @@ void GameLiftBroadsock::OnStartGameSession(Aws::GameLift::Server::Model::GameSes
 
 void GameLiftBroadsock::OnProcessTerminate()
 {
+	printf("[GAMELIFT] OnProcessTerminate\n");
 	// game-specific tasks required to gracefully shut down a game session,
 	// such as notifying players, preserving game state data, and other cleanup
 	printf("[GAMELIFT] OnProcessTerminate Success\n");
@@ -26,11 +28,14 @@ void GameLiftBroadsock::OnProcessTerminate()
 
 void GameLiftBroadsock::TerminateGameSession(int exitCode)
 {
+	printf("[GAMELIFT] TerminateGameSession\n");
 	///< explicitly release any game sessions
 
 	Aws::GameLift::Server::TerminateGameSession();
 
 	Aws::GameLift::Server::ProcessEnding();
+
+	printf("[GAMELIFT] TerminateGameSession Success\n");
 
 	//::TerminateProcess(::GetCurrentProcess(), exitCode);
 	exit(exitCode);
@@ -38,6 +43,7 @@ void GameLiftBroadsock::TerminateGameSession(int exitCode)
 
 bool GameLiftBroadsock::OnHealthCheck()
 {
+	printf("[GAMELIFT] OnHealthCheck\n");
 	bool health = true;
 	// complete health evaluation within 60 seconds and set health
 	return health;
@@ -48,12 +54,14 @@ bool GameLiftBroadsock::Connect() {
 		return false;
 	}
 
+	printf("[GAMELIFT] Calling InitSDK\n");
 	auto initOutcome = Aws::GameLift::Server::InitSDK();
 	if (!initOutcome.IsSuccess()) {
 		//return false; - Generally would have this method log and return a false bool, as the main method is an int type I have set to 0.
-		perror("GameLift InitSDK failed");
+		perror("[GAMELIFT] InitSDK failed");
 		return false;
 	}
+	printf("[GAMELIFT] InitSDK done\n");
 
 	auto processReadyParameter = Aws::GameLift::Server::ProcessParameters(
 		std::bind(&GameLiftBroadsock::OnStartGameSession, this, std::placeholders::_1),
@@ -63,13 +71,14 @@ bool GameLiftBroadsock::Connect() {
 		Aws::GameLift::Server::LogParameters()
 	);
 
+	printf("[GAMELIFT] Calling ProcessReady\n");
 	auto readyOutcome = Aws::GameLift::Server::ProcessReady(processReadyParameter);
 	if (!readyOutcome.IsSuccess()) {
-		perror("GameLift ProcessReady failed");
+		perror("[GAMELIFT] ProcessReady failed");
 		return false;
 	}
 
-	printf("GAMELIFT] ProcessReady Success (Listen port:%d)\n", PORT);
+	printf("[GAMELIFT] ProcessReady Success (Listen port:%d)\n", PORT);
 	return true;
 }
 
