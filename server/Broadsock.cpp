@@ -310,6 +310,7 @@ bool Broadsock::Start() {
 						}
 						message.WriteByte(ch);
 					}
+					message.Rewind();
 
 					// Handle message
 					HandleClientMessage(client, message);

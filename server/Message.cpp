@@ -21,10 +21,10 @@ void Message::Rewind() {
 }
 
 int Message::ReadInt32() {
-	int b0 = bytes[index++];
-	int b1 = bytes[index++];
-	int b2 = bytes[index++];
-	int b3 = bytes[index++];
+	unsigned char b0 = bytes[index++];
+	unsigned char b1 = bytes[index++];
+	unsigned char b2 = bytes[index++];
+	unsigned char b3 = bytes[index++];
 	return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
 }
 

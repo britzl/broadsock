@@ -85,12 +85,10 @@ bool GameLiftBroadsock::Connect() {
 
 
 void GameLiftBroadsock::HandleClientMessage(Client* client, Message message) {
-	char buffer[100];
 	message.ReadString(buffer);
 	if(strcmp("GL_CLAIM_PLAYER_SESSION", buffer) == 0) {
 		message.ReadString(buffer);
-		//The player session ID that GameLift has passed back to the player needs to be passed into this method and used in the API call below, I have left the parameter called playerSessionId to illustrate this.
-		//This is something that the client will need to pass to the server.
+		printf("[GAMELIFT] AcceptPlayerSession %s\n", buffer);
 		auto outcome = Aws::GameLift::Server::AcceptPlayerSession(buffer);
 		if (!outcome.IsSuccess())
 		{

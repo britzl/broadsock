@@ -56,11 +56,11 @@ protected:
 	/**
 	 * Handle a message from a connected client
 	 */
-	void HandleClientMessage(Client* client, Message message);
+	virtual void HandleClientMessage(Client* client, Message message);
 
 public:
 	Broadsock();
 
-	bool Connect();
+	virtual bool Connect();
 	bool Start();
 };
