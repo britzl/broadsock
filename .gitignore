@@ -12,3 +12,5 @@ builtins
 *.o
 
 server/gamelift
+
+server/out/
