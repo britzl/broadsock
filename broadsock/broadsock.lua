@@ -10,14 +10,15 @@ local M = {}
 --- Create a broadsock instance
 -- @param server_ip
 -- @param server_port
+-- @param on_custom_message
 -- @param on_connected
 -- @param on_disconnect
 -- @return instance Instance or nil if something went wrong
 -- @return error_message
-function M.create(server_ip, server_port, on_event, on_connected, on_disconnect)
+function M.create(server_ip, server_port, on_custom_message, on_connected, on_disconnect)
 	assert(server_ip, "You must provide a server IP")
 	assert(server_port, "You must provide a server port")
-	assert(on_event, "You must provide an on_event callback")
+	assert(on_custom_message, "You must provide an on_custom_message callback")
 	assert(on_connected, "You must provide an on_connected callback")
 	assert(on_disconnect, "You must provide an on_disconnect callback")
 	local instance = {}
@@ -76,9 +77,9 @@ function M.create(server_ip, server_port, on_event, on_connected, on_disconnect)
 		--dump_data(data)
 		local sr = stream.reader(data, data_length)
 		local from_uid = sr.number()
-		local event = sr.string()
+		local msg_id = sr.string()
 
-		if event == "GO" then
+		if msg_id == "GO" then
 			if not clients[from_uid] then
 				add_client(from_uid)
 			end
@@ -109,7 +110,7 @@ function M.create(server_ip, server_port, on_event, on_connected, on_disconnect)
 					end
 				end
 			end
-		elseif event == "GOD" then
+		elseif msg_id == "GOD" then
 			if clients[from_uid] then
 				local gouid = sr.string()
 				local remote_gameobjects_for_user = remote_gameobjects[from_uid]
@@ -123,21 +124,21 @@ function M.create(server_ip, server_port, on_event, on_connected, on_disconnect)
 				end
 				remote_gameobjects_for_user[gouid] = nil
 			end
-		elseif event == "CONNECT_OTHER" then
+		elseif msg_id == "CONNECT_OTHER" then
 			print("CONNECT")
 			add_client(from_uid)
-		elseif event == "CONNECT_SELF" then
+		elseif msg_id == "CONNECT_SELF" then
 			print("CONNECT")
 			add_client(from_uid)
 			uid = from_uid
 			on_connected()
-		elseif event == "DISCONNECT" then
+		elseif msg_id == "DISCONNECT" then
 			print("DISCONNECT")
 			remove_client(from_uid)
 		else
-			print("CUSTOM EVENT", event)
-			local event_data, event_length = sr.rest()
-			on_event(event, from_uid, stream.reader(event_data, event_length))
+			print("CUSTOM MESSAGE", msg_id)
+			local message_data, message_length = sr.rest()
+			on_custom_message(msg_id, from_uid, stream.reader(message_data, message_length))
 		end
 	end
 
