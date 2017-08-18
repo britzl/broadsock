@@ -12,9 +12,9 @@ local function on_connected(self)
 	msg.post(self.creator, "connected")
 end
 
-local function on_event(self, event, from_uid, stream_reader)
-	print("On event")
-	msg.post(self.creator, "event", { event = event, from = from_uid })
+local function on_custom_message(self, msg_id, from_uid, stream_reader)
+	print("On custom message")
+	msg.post(self.creator, "message", { msg_id = msg_id, from = from_uid })
 end
 
 local function connect(self, ip, port)
@@ -22,10 +22,10 @@ local function connect(self, ip, port)
 	local function callback(fn)
 		return function(...) fn(self, ...) end
 	end
-	
+
 	local client, err = broadsock.create(
 		ip, port,
-		callback(on_event),
+		callback(on_custom_message),
 		callback(on_connected),
 		callback(on_disconnected))
 
