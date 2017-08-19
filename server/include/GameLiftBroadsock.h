@@ -16,6 +16,7 @@ class GameLiftBroadsock : public Broadsock {
 
 protected:
 	void HandleClientMessage(Client* client, Message message);
+	void HandleClientDisconnected(Client *client);
 
 public:
 	bool Connect();

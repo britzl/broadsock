@@ -84,14 +84,21 @@ bool GameLiftBroadsock::Connect() {
 }
 
 
+void GameLiftBroadsock::HandleClientDisconnected(Client *client) {
+	printf("[GAMELIFT] RemovePlayerSession %s\n", client->customData);
+	Aws::GameLift::Server::RemovePlayerSession(client->customData);
+	Broadsock::HandleClientDisconnected(client);
+}
+
+
 void GameLiftBroadsock::HandleClientMessage(Client* client, Message message) {
 	message.ReadString(buffer);
 	if(strcmp("GL_CLAIM_PLAYER_SESSION", buffer) == 0) {
 		message.ReadString(buffer);
+		strcpy(client->customData, buffer);
 		printf("[GAMELIFT] AcceptPlayerSession %s\n", buffer);
 		auto outcome = Aws::GameLift::Server::AcceptPlayerSession(buffer);
-		if (!outcome.IsSuccess())
-		{
+		if (!outcome.IsSuccess()) {
 			printf("[GAMELIFT] AcceptPlayerSession Fail: %s\n", outcome.GetError().GetErrorMessage().c_str());
 			Message playerSessionFailedMessage;
 			playerSessionFailedMessage.WriteNumber(client->uid);

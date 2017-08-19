@@ -4,13 +4,18 @@
 #include <Message.h>
 
 
-#define MAX_CLIENTS	5
+#define MAX_CLIENTS	100
 #define PORT 5000
 
 typedef struct {
 	struct sockaddr_in addr;
 	int connfd;
+
+	/* Unique user id, incremented from Broadsock client count */
 	int uid;
+
+	/* Custom user data */
+	char customData[250];
 } Client;
 
 
@@ -43,19 +48,11 @@ protected:
 	/* Send message to client */
 	void SendMessageClient(Message message, int uid);
 
-	/**
-	 * Handle a disconnected client
-	 * This will remove the client from the queue and yield thread
-	 */
-	void HandleClientDisconnected(Client* client);
-	/**
-	 * Handle a connected client
-	 * This will create a Client struct and fork the thread
-	 */
+	/** Handle a disconnected client */
+	virtual void HandleClientDisconnected(Client* client);
+	/** Handle a connected client */
 	bool HandleClientConnected(struct sockaddr_in client_addr, int connfd);
-	/**
-	 * Handle a message from a connected client
-	 */
+	/** Handle a message from a connected client */
 	virtual void HandleClientMessage(Client* client, Message message);
 
 public:

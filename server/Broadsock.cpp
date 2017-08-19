@@ -142,13 +142,15 @@ void Broadsock::HandleClientDisconnected(Client* client) {
 
 /**
  * Handle a connected client
- * This will create a Client struct and fork the thread
+ * This will create a Client struct and notify other clients of the connection
+ * The connected client will also receive a message with the assigned user id
  */
 bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd) {
 	// Client settings
 	Client *client = (Client *)malloc(sizeof(Client));
 	client->addr = client_addr;
 	client->connfd = connfd;
+	client->customData[0] = 0;
 	client->uid = uid++;
 
 	printf("<<CONNECT %s:%d REFERENCED BY %d\n", inet_ntoa(client->addr.sin_addr), ntohs(client->addr.sin_port), client->uid);
@@ -174,7 +176,9 @@ bool Broadsock::HandleClientConnected(struct sockaddr_in client_addr, int connfd
 	return true;
 }
 
+
 void Broadsock::HandleClientMessage(Client* client, Message message) {
+	// Add sender id to the message and broadcast it
 	Message out;
 	out.WriteNumber(client->uid);
 	out.WriteBytes(message.MessageContent(), message.MessageLength());
