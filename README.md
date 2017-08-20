@@ -12,10 +12,10 @@ A Broadsock message has the following format:
 +------------+-~~~~~~~~~~~~-+-~~~~~~~~~~~~~~~-+-~~~~~~~~-+
 ````
 
-LENGTH = Length of the message in bytes
-UID = Unique ID of the player that sent the message (only when broadcast from server)
-MSG_ID = Message id
-DATA = Message data
+* LENGTH = Length of the message in bytes
+* UID = Unique ID of the player that sent the message (only when broadcast from server)
+* MSG_ID = Message id
+* DATA = Message data
 
 ### Message ids
 Broadsock has a number of reserved message ids:
