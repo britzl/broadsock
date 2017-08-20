@@ -39,6 +39,8 @@ class Broadsock {
 	void Send(int fd, Message message);
 
 protected:
+	/** Check if the server is empty, ie has no connected clients */
+	bool IsEmpty();
 	/* Send message to all clients but the sender */
 	void SendMessage(Message message, int uid);
 	/* Send message to all clients */

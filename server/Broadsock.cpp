@@ -51,6 +51,10 @@ void Broadsock::QueueDelete(int uid) {
 	}
 }
 
+bool Broadsock::IsEmpty() {
+	return clientCount == 0;
+}
+
 void Broadsock::Send(int fd, Message message) {
 	int length = message.MessageLength();
 	char* bytes = message.MessageContent();

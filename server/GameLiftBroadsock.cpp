@@ -88,6 +88,10 @@ void GameLiftBroadsock::HandleClientDisconnected(Client *client) {
 	printf("[GAMELIFT] RemovePlayerSession %s\n", client->customData);
 	Aws::GameLift::Server::RemovePlayerSession(client->customData);
 	Broadsock::HandleClientDisconnected(client);
+
+	if(IsEmpty()) {
+		TerminateGameSession(0);
+	}
 }
 
 
