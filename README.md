@@ -34,6 +34,8 @@ You can use the Broadsock client in your own project by adding this project as a
 Or point to the ZIP file of a [specific release](https://github.com/britzl/broadsock/releases).
 
 ## Usage
+
+### Client integration
 The easiest way to get started with Broadsock is to add the ````broadsock/broadsock.go```` instance to a collection in your game and then use message passing to connect and register game objects:
 
 	local BROADSOCK = msg.url("example:/broadsock#script")
@@ -70,3 +72,29 @@ The easiest way to get started with Broadsock is to add the ````broadsock/broads
 		go.delete(self.bullet_id)
 		msg.post(BROADSOCK, "unregister_gameobject", { id = self.bullet_id })
 	end
+
+
+### Server - Basic
+The Broadsock server is located in the server folder of this project. The server works on OSX and Linux. Build it using the provided Makefile:
+
+	make broadsock
+
+The server will be built to the server/out folder. Run it from the command line:
+
+	./out/broadsock
+
+Once the server is running it will listen for Broadsock client connections. The server will broadcast any received message to connected clients.
+
+### Server - Amazon GameLift
+The Broadsock server also exists as a version integrating with Amazon GameLift. The difference from the basic version is that the server hooks into the lifecycle functions of an Amazon GameLift dedicated server where it does health check reports, notifies GameLift of client disconnects and does proper shutdown of the server process when all clients have disconnected. The server works on Linux only. Build it using the provided Makefile:
+
+	make gamelift
+
+The server will be built to the server/out folder. Run it from the command line:
+
+	./out/gamelift
+
+Running the server locally also requires GameLiftLocal to be running on the machine. You can use the ````server/gamelift_uploadbuild.sh```` script to upload the build to AWS using the AWS CLI:
+
+	# Upload version 1 of the build to the eu-central-1 (Frankfurt) region
+	./gamelift_uploadbuild.sh 1 eu-central-1
