@@ -1,5 +1,5 @@
 local socket = require "builtins.scripts.socket"
-local tcp_send_queue = require "defnet.tcp_send_queue"
+local tcp_writer = require "broadsock.util.tcp_writer"
 local tcp_reader = require "broadsock.util.tcp_reader"
 local stream = require "broadsock.util.stream"
 
@@ -35,13 +35,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 
 	local uid = nil
 
-	local connection = {
-		socket = nil,
-		send_queue = nil,
-		socket_table = nil,
-		connected = false,
-	}
-
+	local connection = {}
 
 	local function add_client(uid_to_add)
 		clients[uid_to_add] = { uid = uid_to_add }
@@ -185,7 +179,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	-- @param data
 	function instance.send(data)
 		if connection.connected then
-			connection.send_queue.add(stream.number_to_int32(#data) .. data)
+			connection.writer.add(stream.number_to_int32(#data) .. data)
 		end
 	end
 
@@ -213,7 +207,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 			local receivet, sendt = socket.select(connection.socket_table, connection.socket_table, 0)
 
 			if sendt[connection.socket] then
-				local ok, err = connection.send_queue.send()
+				local ok, err = connection.writer.send()
 				if not ok and err == "closed" then
 					instance.destroy()
 					on_disconnect()
@@ -238,7 +232,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 		if connection.connected then
 			connection.socket:close()
 			connection.socket = nil
-			connection.send_queue = nil
+			connection.writer = nil
 			connection.reader = nil
 			connection.socket_table = nil
 			connection.connected = false
@@ -252,11 +246,11 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 		assert(connection.socket:connect(server_ip, server_port))
 		assert(connection.socket:settimeout(0))
 		connection.socket_table = { connection.socket }
-		connection.send_queue = tcp_send_queue.create(connection.socket, M.TCP_SEND_CHUNK_SIZE)
+		connection.writer = tcp_writer.create(connection.socket, M.TCP_SEND_CHUNK_SIZE)
 		connection.reader = tcp_reader.create(connection.socket, on_data)
 	end)
-	if not ok or not connection.socket or not connection.send_queue then
-		print("tcp_client.create() error", err)
+	if not ok or not connection.socket then
+		print("broadsock.create() error", err)
 		return nil, ("Unable to connect to %s:%d"):format(server_ip, server_port)
 	end
 	connection.connected = true

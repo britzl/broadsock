@@ -16,7 +16,7 @@ function init(self)
 end
 
 function on_message(self, message_id, message, sender)
-	if message_id == hash("ready") then
+	if message_id == hash("connected") then
 		if sender == BROADSOCK then
 			factory.create("/factories#player", random_position(), nil, { remote = false })	
 		end

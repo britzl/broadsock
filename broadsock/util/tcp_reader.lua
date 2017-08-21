@@ -37,7 +37,7 @@ function M.create(socket, on_data)
 
 	local co = coroutine.create(function()
 		while connected do
-			local length_str = receive(4, true)
+			local length_str = receive(4)
 			local b1 = length_str:byte(1)
 			local b2 = length_str:byte(2)
 			local b3 = length_str:byte(3)
