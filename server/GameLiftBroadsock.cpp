@@ -90,7 +90,7 @@ void GameLiftBroadsock::HandleClientDisconnected(Client *client) {
 	Broadsock::HandleClientDisconnected(client);
 
 	if(IsEmpty()) {
-		TerminateGameSession(0);
+		TerminateGameSession(0xDEAD);
 	}
 }
 
