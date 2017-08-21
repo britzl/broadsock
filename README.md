@@ -34,7 +34,7 @@ You can use the Broadsock client in your own project by adding this project as a
 Or point to the ZIP file of a [specific release](https://github.com/britzl/broadsock/releases).
 
 ## Usage
-The easiest way to get started with Broadsock is to add the ````broadsock/broadsock.go```` instance to a collection in your game and the use message passing to connect and register game objects:
+The easiest way to get started with Broadsock is to add the ````broadsock/broadsock.go```` instance to a collection in your game and then use message passing to connect and register game objects:
 
 	local BROADSOCK = msg.url("example:/broadsock#script")
 
