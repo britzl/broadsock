@@ -63,7 +63,7 @@ return function()
 			client2.update()
 			assert(callbacks2.on_connected.calls == 1)
 			assert(client2.client_count() == 1)
-	end)
+		end)
 
 
 		it("should send game object positions to other clients", function()
