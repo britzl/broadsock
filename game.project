@@ -1,6 +1,7 @@
 [project]
 title = Broadsock
 version = 0.1
+dependencies = https://github.com/britzl/deftest/archive/1.2.1.zip
 
 [input]
 game_binding = /input/game.input_bindingc
@@ -24,7 +25,7 @@ include_dirs = broadsock
 max_debug_vertices = 50000
 
 [bootstrap]
-main_collection = /example/example.collectionc
+main_collection = /example/client/example.collectionc
 
 [ios]
 bundle_identifier = com.britzl.broadsock
@@ -34,3 +35,4 @@ package = com.britzl.broadsock
 
 [osx]
 bundle_identifier = com.britzl.broadsock
+

@@ -7,6 +7,10 @@ local stream = require "broadsock.util.stream"
 local M = {}
 
 
+local function log(...)
+	--print("[BROADSOCK CLIENT]", ...)
+end
+
 --- Create a broadsock instance
 -- @param server_ip
 -- @param server_port
@@ -24,6 +28,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	local instance = {}
 
 	local clients = {}
+	local client_count = 0
 
 	local gameobjects = {}
 	local gameobject_count = 0
@@ -38,42 +43,36 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	local connection = {}
 
 	local function add_client(uid_to_add)
+		log("add_client", uid_to_add)
 		clients[uid_to_add] = { uid = uid_to_add }
 		remote_gameobjects[uid_to_add] = {}
+		client_count = client_count + 1
 	end
 
 	local function remove_client(uid_to_remove)
+		log("remove_client", uid_to_remove)
 		clients[uid_to_remove] = nil
 		for _,gameobject in pairs(remote_gameobjects[uid_to_remove]) do
 			go.delete(gameobject.id)
 		end
 		remote_gameobjects[uid_to_remove] = nil
+		client_count = client_count - 1
 	end
 
-	local function dump_data(data)
-		local s = ""
-		local i = 1
-		while true do
-			local length = stream.int32_to_number(data, i) i = i + 4
-			local str = data:sub(i, i + length) i = i + length
-			local foo = tostring(length) .. ":" .. tostring(str)
-			print(tostring(length) .. ":" .. tostring(str))
-			s  = s .. foo
-			if data:byte(i) == nil then
-				break
-			end
-		end
-		return s
+	--- Get the number of clients (including self)
+	-- @return Client count
+	function instance.client_count()
+		return client_count
 	end
-
 
 	local function on_data(data, data_length)
-		--dump_data(data)
 		local sr = stream.reader(data, data_length)
 		local from_uid = sr.number()
 		local msg_id = sr.string()
+		log("on_data from:", from_uid, "msg_id:", msg_id)
 
 		if msg_id == "GO" then
+			log("GO")
 			if not clients[from_uid] then
 				add_client(from_uid)
 			end
@@ -103,6 +102,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 				end
 			end
 		elseif msg_id == "GOD" then
+			log("GOD")
 			if clients[from_uid] then
 				local gouid = sr.string()
 				local remote_gameobjects_for_user = remote_gameobjects[from_uid]
@@ -113,18 +113,18 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 				remote_gameobjects_for_user[gouid] = nil
 			end
 		elseif msg_id == "CONNECT_OTHER" then
-			print("CONNECT")
+			log("CONNECT_OTHER")
 			add_client(from_uid)
 		elseif msg_id == "CONNECT_SELF" then
-			print("CONNECT")
+			log("CONNECT_SELF")
 			add_client(from_uid)
 			uid = from_uid
 			on_connected()
 		elseif msg_id == "DISCONNECT" then
-			print("DISCONNECT")
+			log("DISCONNECT")
 			remove_client(from_uid)
 		else
-			print("CUSTOM MESSAGE", msg_id)
+			log("CUSTOM MESSAGE", msg_id)
 			local message_data, message_length = sr.rest()
 			on_custom_message(msg_id, from_uid, stream.reader(message_data, message_length))
 		end
@@ -138,6 +138,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	function instance.register_gameobject(id, type)
 		assert(id, "You must provide a game object id")
 		assert(type and factories[type], "You must provide a known game object type")
+		log("register_gameobject", id, type)
 		go_uid_sequence = go_uid_sequence + 1
 		local gouid = tostring(uid) .. "_" .. go_uid_sequence
 		gameobjects[gouid] = { id = id, type = type, gouid = gouid }
@@ -150,6 +151,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	-- that the game object has been removed
 	-- @param id Id of the game object
 	function instance.unregister_gameobject(id)
+		log("unregister_gameobject", id)
 		for gouid,gameobject in pairs(gameobjects) do
 			if gameobject.id == id then
 				gameobjects[gouid] = nil
@@ -161,6 +163,13 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 		error("Unable to find game object")
 	end
 
+	--- Get the number of registered game objects
+	-- @return count Game object count
+	function instance.gameobject_count()
+		return gameobject_count
+	end
+
+
 	--- Register a factory and associate it with a game object type
 	-- The factory will be used to create game objects that have been spawned
 	-- by a remote client
@@ -169,9 +178,26 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	function instance.register_factory(url, type)
 		assert(url, "You must provide a factory URL")
 		assert(type, "You must provide a game object type")
+		log("register_factory", url, type)
 		factories[type] = url
 	end
 
+	--- Check if a specific factory type is registered or not
+	-- @param type
+	-- @return True if registered, otherwise false
+	function instance.has_factory(type)
+		assert(type, "You must provide a game object type")
+		return factories[type] ~= nil
+	end
+
+
+	--- Get the url of the factory associated with a specific type
+	-- @param type
+	-- @return Factory url or nil if it's not registered
+	function instance.get_factory_url(type)
+		assert(type, "You must provide a game object type")
+		return factories[type]
+	end
 
 
 	--- Send data to the broadsock server
@@ -179,6 +205,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	-- @param data
 	function instance.send(data)
 		if connection.connected then
+			log("send", #data, "data:", data)
 			connection.writer.add(stream.number_to_int32(#data) .. data)
 		end
 	end
@@ -188,6 +215,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	-- This will also send any other queued data
 	function instance.update()
 		if connection.connected then
+			log("update - sending game objects", instance.gameobject_count())
 			local sw = stream.writer()
 			sw.string("GO")
 			sw.number(gameobject_count)
@@ -207,6 +235,10 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 			local receivet, sendt = socket.select(connection.socket_table, connection.socket_table, 0)
 
 			if sendt[connection.socket] then
+				log("ready to send")
+				if not connection.writer.empty() then
+					log("update - sending from writer")
+				end
 				local ok, err = connection.writer.send()
 				if not ok and err == "closed" then
 					instance.destroy()
@@ -216,6 +248,7 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 			end
 
 			if receivet[connection.socket] then
+				log("update - receiving from reader")
 				local ok, err = connection.reader.receive()
 				if not ok then
 					instance.destroy()
@@ -223,6 +256,8 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 					return
 				end
 			end
+		else
+			log("not connected")
 		end
 	end
 
@@ -230,15 +265,16 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 	-- Nothing can be done with the instance after this call
 	function instance.destroy()
 		if connection.connected then
+			log("destroy")
 			connection.socket:close()
 			connection.socket = nil
 			connection.writer = nil
 			connection.reader = nil
 			connection.socket_table = nil
 			connection.connected = false
+			client_count = 0
 		end
 	end
-
 
 
 	local ok, err = pcall(function()
@@ -250,9 +286,10 @@ function M.create(server_ip, server_port, on_custom_message, on_connected, on_di
 		connection.reader = tcp_reader.create(connection.socket, on_data)
 	end)
 	if not ok or not connection.socket then
-		print("broadsock.create() error", err)
+		log("broadsock.create() error", err)
 		return nil, ("Unable to connect to %s:%d"):format(server_ip, server_port)
 	end
+	log("created client")
 	connection.connected = true
 
 	return instance

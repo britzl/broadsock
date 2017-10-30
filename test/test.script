@@ -1,0 +1,17 @@
+local deftest = require "deftest.deftest"
+local test_stream = require "test.test_stream"
+local test_tcp_writer = require "test.test_tcp_writer"
+local test_tcp_reader = require "test.test_tcp_reader"
+local test_broadsock_client = require "test.test_broadsock_client"
+local test_broadsock_server = require "test.test_broadsock_server"
+local test_broadsock = require "test.test_broadsock"
+
+function init(self)
+	deftest.add(test_stream)
+	deftest.add(test_tcp_writer)
+	deftest.add(test_tcp_reader)
+	deftest.add(test_broadsock_client)
+	deftest.add(test_broadsock_server)
+	deftest.add(test_broadsock)
+	deftest.run()
+end

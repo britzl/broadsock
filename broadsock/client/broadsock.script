@@ -1,4 +1,4 @@
-local broadsock = require "broadsock.broadsock"
+local broadsock = require "broadsock.client.broadsock"
 local stream = require "broadsock.util.stream"
 
 local function on_disconnected(self)

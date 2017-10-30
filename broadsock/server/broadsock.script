@@ -1,0 +1,19 @@
+go.property("port", 5000)
+
+local broadsock = require "broadsock.server.broadsock"
+
+function init(self)
+	local ok, err = broadsock.start(self.port)
+	if not ok then
+		print(err)
+		os.exit(1)
+	end
+end
+
+function final(self)
+	broadsock.stop()
+end
+
+function update(self, dt)
+	broadsock.update()
+end

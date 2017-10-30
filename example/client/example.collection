@@ -1,7 +1,7 @@
 name: "example"
 instances {
   id: "broadsock"
-  prototype: "/broadsock/broadsock.go"
+  prototype: "/broadsock/client/broadsock.go"
   position {
     x: 0.0
     y: 0.0
@@ -24,7 +24,7 @@ embedded_instances {
   id: "game"
   data: "components {\n"
   "  id: \"game\"\n"
-  "  component: \"/example/game.script\"\n"
+  "  component: \"/example/client/game.script\"\n"
   "  position {\n"
   "    x: 0.0\n"
   "    y: 0.0\n"
@@ -60,7 +60,8 @@ embedded_instances {
   data: "embedded_components {\n"
   "  id: \"player\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/example/player.go\\\"\\n"
+  "  data: \"prototype: \\\"/example/client/player.go\\\"\\n"
+  "load_dynamically: false\\n"
   "\"\n"
   "  position {\n"
   "    x: 0.0\n"
@@ -77,7 +78,8 @@ embedded_instances {
   "embedded_components {\n"
   "  id: \"star\"\n"
   "  type: \"factory\"\n"
-  "  data: \"prototype: \\\"/example/star.go\\\"\\n"
+  "  data: \"prototype: \\\"/example/client/star.go\\\"\\n"
+  "load_dynamically: false\\n"
   "\"\n"
   "  position {\n"
   "    x: 0.0\n"

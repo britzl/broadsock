@@ -1,5 +1,20 @@
 local M = {}
 
+function M.dump(bytes)
+	local dmp = ""
+	for i=1,#bytes do
+		local b = bytes:byte(i)
+		if (b >=32 and b <= 126) then
+			dmp = dmp .. tostring(b) .. "[" .. string.char(b) .. "] "
+		else
+			dmp = dmp .. tostring(b) .. "[?] "
+		end
+	end
+	dmp = dmp .. " (length: " .. #bytes .. ")"
+	return dmp
+end
+
+
 --- Convert a Lua number to an int32 (4 bytes)
 -- @param number The number to convert, only the integer part will be converted
 -- @return String with 4 bytes representing the number
@@ -16,11 +31,12 @@ end
 -- @param index Index into the string to read bytes from
 -- @return Lua number
 function M.int32_to_number(int32, index)
+	index = index or 1
 	local b1 = int32:byte(index + 0)
 	local b2 = int32:byte(index + 1)
 	local b3 = int32:byte(index + 2)
 	local b4 = int32:byte(index + 3)
-	return bit.lshift(b1, 24) + bit.lshift(b2, 16) + bit.lshift(b3, 8) + b4
+	return bit.bor(bit.lshift(b1, 24), bit.lshift(b2, 16), bit.lshift(b3, 8), b4)
 end
 
 
@@ -70,6 +86,15 @@ function M.reader(str, str_length)
 		return vmath.quat(x, y, z, w)
 	end
 
+	--- Read a sequence of bytes from the stream
+	-- @return The bytes
+	function instance.bytes(count)
+		assert(count, "You must provide a number of bytes to read")
+		local s = str:sub(index, index + count - 1)
+		index = index + count
+		return s
+	end
+
 	--- Get the rest of the stream, ie anything not read yet, up until the length
 	-- of the stream
 	-- @return Remaining bytes in the stream
@@ -99,6 +124,12 @@ function M.writer()
 	local instance = {}
 
 	local strings = {}
+
+	function instance.clear()
+		while #strings > 0 do
+			table.remove(strings, #strings)
+		end
+	end
 
 	--- Write a string to the stream
 	-- A string is represented by 4 bytes indicating the length of the string,
@@ -142,6 +173,13 @@ function M.writer()
 		instance.number(quat.y)
 		instance.number(quat.z)
 		instance.number(quat.w)
+		return instance
+	end
+
+	--- Writes bytes to the stream (raw, without appending length)
+	-- @param bytes The bytes to write
+	function instance.bytes(bytes)
+		strings[#strings + 1] = bytes
 		return instance
 	end
 

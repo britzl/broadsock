@@ -1,6 +1,6 @@
 components {
   id: "star"
-  component: "/example/star.script"
+  component: "/example/client/star.script"
   position {
     x: 0.0
     y: 0.0
@@ -16,7 +16,7 @@ components {
 embedded_components {
   id: "sprite"
   type: "sprite"
-  data: "tile_set: \"/example/assets/example.atlas\"\n"
+  data: "tile_set: \"/example/client/assets/example.atlas\"\n"
   "default_animation: \"star3\"\n"
   "material: \"/builtins/materials/sprite.material\"\n"
   "blend_mode: BLEND_MODE_ALPHA\n"

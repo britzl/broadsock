@@ -21,13 +21,19 @@ function M.create(socket, chunk_size)
 		queue = {}
 	end
 
-	--- Add data to be sent on the next call to update()
+	--- Add data to be sent on the next call to send()
 	-- @param data Data to be sent
 	function instance.add(data)
 		assert(data, "You must provide some data")
 		for i=1,#data,chunk_size do
 			table.insert(queue, { data = data:sub(i, i + chunk_size - 1), sent_index = 0 })
 		end
+	end
+
+	--- Check if the writer is empty
+	-- @return true if empty, false if it has data to send
+	function instance.empty()
+		return #queue == 0
 	end
 
 	--- Send data over the socket

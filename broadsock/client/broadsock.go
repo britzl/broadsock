@@ -1,6 +1,6 @@
 components {
   id: "script"
-  component: "/broadsock/broadsock.script"
+  component: "/broadsock/client/broadsock.script"
   position {
     x: 0.0
     y: 0.0
