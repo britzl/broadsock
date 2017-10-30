@@ -25,7 +25,7 @@ include_dirs = broadsock
 max_debug_vertices = 50000
 
 [bootstrap]
-main_collection = /example/client/example.collectionc
+main_collection = /test/test.collectionc
 
 [ios]
 bundle_identifier = com.britzl.broadsock
