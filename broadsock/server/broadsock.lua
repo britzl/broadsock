@@ -150,6 +150,10 @@ local function handle_client_connected(ip, port, skt)
 	return client
 end
 
+--- Start the server. This will set up the server socket.
+-- @param port The port to listen to connections on
+-- @return success True on success, otherwise false
+-- @return error Error message on failure, otherwise nil
 function M.start(port)
 	assert(port, "You must provide a port")
 	log("Starting TCP server on port " .. port)
@@ -166,6 +170,8 @@ function M.start(port)
 	return true
 end
 
+--- Stop the server. This will close the server socket
+-- and close any client connections
 function M.stop()
 	if server_socket then
 		server_socket:close()
@@ -177,6 +183,8 @@ function M.stop()
 	end
 end
 
+--- Update the server. The server will listen for new connections
+-- and read from connected client sockets.
 function M.update()
 	if not server_socket then
 		return
