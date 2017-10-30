@@ -1,4 +1,4 @@
-name: "example"
+name: "client"
 instances {
   id: "broadsock"
   prototype: "/broadsock/client/broadsock.go"
